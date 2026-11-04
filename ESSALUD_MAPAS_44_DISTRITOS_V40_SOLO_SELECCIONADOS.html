@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EsSalud · Mapas distritales V13 · Aprovechamiento del espacio</title>
+<style>
+:root{font-family:Arial,Segoe UI,sans-serif;color:#193148;background:#edf3f8;--c1:#eff7fb;--c2:#c8e0ee;--c3:#93c5dd;--c4:#5ea7cb;--c5:#2e84b3;--line:#075578}
+*{box-sizing:border-box} body{margin:0;background:#edf3f8;color:#193148}
+header{background:#075578;color:#fff;padding:20px 3vw} header h1{margin:6px 0 4px;font-size:28px} header p{margin:3px 0;font-size:13px;opacity:.95}
+main{max-width:1900px;margin:auto;padding:14px}
+.toolbar{background:#fff;border:1px solid #cbdce8;border-radius:12px;padding:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
+label{font-weight:700;font-size:12px;display:grid;gap:5px} input,select,button{font-size:14px;padding:10px;border:1px solid #b5ccdc;border-radius:7px;background:#fff} button{background:#087c9c;color:white;border:0;cursor:pointer;font-weight:700} button.alt{background:#e3edf4;color:#164c6b}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px} .kpi{background:#fff;padding:12px 17px;border-radius:9px;flex:1;min-width:160px;border:1px solid #d9e3ec} .kpi span{display:block;color:#5a7081;font-size:12px} .kpi b{font-size:22px;color:#075578}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:15px;align-items:start}
+.panel{background:#fff;border:1px solid #d1e0e9;border-radius:12px;padding:14px}
+#mapWrap{position:relative;min-height:760px}
+#mapHolder{height:min(1250px,110vh);min-height:950px;border:1px solid #d6e4ed;background:#eef5f8;border-radius:10px;display:grid;place-items:center;overflow:hidden;position:relative}
+#mapHolder svg{width:100%;height:100%;display:block}
+.legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:#526d80;margin-top:10px}
+.scale{display:flex;align-items:center;gap:0} .sw{width:46px;height:12px;border-top:1px solid #aac7d8;border-bottom:1px solid #aac7d8} .sw:first-child{border-left:1px solid #aac7d8;border-radius:6px 0 0 6px} .sw:last-child{border-right:1px solid #aac7d8;border-radius:0 6px 6px 0}
+.note{font-size:12px;color:#526d80;line-height:1.45}
+.side h2{font-size:20px;color:#075578;margin:0 0 4px} .side .small{font-size:12px;color:#5a7081;margin-bottom:12px}
+.iprows{display:grid;gap:10px} .ipitem{font-size:12px} .iptitle{display:flex;justify-content:space-between;gap:7px;margin-bottom:4px} .iptitle strong{font-size:12px} .iptitle span{white-space:nowrap;font-weight:700} .track{height:12px;background:#e6eff3;border-radius:50px;overflow:hidden} .fill{height:100%;border-radius:50px}
+.tablelist{margin-top:10px;max-height:290px;overflow:auto;border-top:1px solid #e4edf3;padding-top:8px}
+.tablelist button{display:block;width:100%;text-align:left;background:#fff;color:#163e57;border:1px solid #d7e4ec;margin-bottom:6px;font-weight:600;padding:8px 10px} .tablelist button.active{background:#eaf5fb;border-color:#9ec9de}
+.status{font-size:12px;color:#527086}
+.tooltip{position:absolute;pointer-events:none;background:rgba(7,85,120,.95);color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;max-width:260px;transform:translate(-50%,-110%);display:none;z-index:2;box-shadow:0 3px 12px rgba(0,0,0,.18)}
+.empty{font-size:13px;color:#6a8190;padding:16px;text-align:center}
+@media(max-width:1100px){.layout{grid-template-columns:1fr} #mapHolder{height:820px;}}
+@media print{header{background:white;color:#075578;padding:0 0 8px} .toolbar,.tablelist button,.status{display:none !important} main{max-width:none;padding:0} .layout{grid-template-columns:1.25fr .85fr} #mapHolder{height:180mm} .panel{border:0;box-shadow:none;padding:0} body{background:#fff} .tablelist{max-height:none;overflow:visible} }
+
+/* Navegación entre mapas */
+.viewtabs{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.viewtabs button{background:#fff;border:1px solid #b6cedb;color:#075578;border-radius:9px;padding:11px 17px;display:inline-flex;align-items:center;gap:8px}
+.viewtabs button.active{background:#087c9c;color:#fff;border-color:#087c9c}
+.viewtabs button:focus-visible,.quickSwitch:focus-visible{outline:3px solid #e49341;outline-offset:2px}
+.quickSwitch{margin-left:auto;background:#146f8e;border-radius:8px;padding:10px 16px;white-space:nowrap}
+#districtView{display:none;background:white;border:1px solid #d1e0e9;border-radius:12px;overflow:hidden}
+#districtFrame{display:block;width:100%;height:calc(100vh - 190px);min-height:770px;border:0;background:white}
+@media(max-width:850px){#districtFrame{height:88vh;min-height:680px}.quickSwitch{margin-left:0}}
+@media print{.viewtabs,.quickSwitch,#districtView{display:none!important}#generalView{display:block!important}}
+.map-expanded .layout{grid-template-columns:minmax(0,1fr)}.map-expanded #mapHolder{height:calc(100vh - 180px);min-height:900px}.map-expanded .side{display:none}@media(max-width:1100px){.map-expanded #mapHolder{min-height:600px}}
+
+/* V12: mapa general a todo el ancho y selector de distritos en la barra superior */
+.layout{grid-template-columns:minmax(0,1fr)}
+#mapHolder{height:min(1250px,110vh);min-height:950px}
+#mapWrap{min-height:0}
+.side{display:block;margin-top:12px}
+.side[hidden]{display:none!important}
+.districtQuickLabel{margin-left:auto;min-width:275px;max-width:335px;flex:1}
+#districtQuick{width:100%;color:#075578;font-weight:700;background:#e8f4fa}
+.quickSwitch{margin-left:0}
+@media(max-width:900px){#mapHolder{height:800px;min-height:620px}.districtQuickLabel{min-width:225px}}
+@media print{#mapHolder{height:185mm;min-height:0}.side:not([hidden]){margin-top:6mm}.districtQuickLabel{display:none}}
+
+/* V13: el área vertical del mapa crece junto con su ancho; no se estira ni deforma la geometría. */
+#mapHolder{height:clamp(1100px,90vw,1800px)!important;min-height:1100px!important}
+#mapWrap{min-height:0}
+#mapHolder svg{width:100%;height:100%;object-fit:contain}
+@media(max-width:950px){#mapHolder{height:clamp(750px,115vw,1200px)!important;min-height:750px!important}}
+@media print{#mapHolder{height:185mm!important;min-height:0!important}}
+
+/* V17: Acercamiento independiente del grupo metropolitano resaltado */
+.metroInset{position:absolute;left:18px;bottom:20px;width:min(235px,21%);background:#fff;border:2px solid #087c9c;border-radius:11px;box-shadow:0 8px 26px #183d5d32;padding:9px;z-index:3}
+.metroInset h3{font-size:13px;margin:1px 0 5px;color:#075578}
+.metroInset svg{display:block;width:100%;height:165px;background:#edf5f9;border-radius:6px}
+.metroInset .hint{font-size:10px;color:#577082;margin:5px 0 0}
+@media(max-width:900px){.metroInset{width:min(210px,35%)}.metroInset svg{height:145px}}
+@media print{.metroInset{width:20%;bottom:10px;left:10px}.metroInset svg{height:125px}}
+
+.multiControl{position:relative;z-index:22;align-self:end}.multiControl>button{white-space:nowrap}.multiPanel{position:absolute;top:calc(100% + 6px);left:0;width:min(360px,85vw);max-height:390px;overflow:auto;background:#fff;border:1px solid #b5ccdc;border-radius:10px;box-shadow:0 8px 22px #15405a40;padding:10px}.multiPanel[hidden]{display:none}.multiBtns{display:flex;gap:7px;margin-bottom:8px}.multiBtns button{font-size:11px;padding:7px}.multiChoices{display:grid;gap:2px;max-height:300px;overflow:auto}.multiChoices label{display:flex;align-items:center;gap:8px;padding:6px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer}.multiChoices label:hover{background:#eaf5fa}.multiChoices input{width:17px;height:17px;margin:0}.multi-selected{color:#075578;font-weight:700}.map-selected-tag{color:#075578;font-weight:700}
+
+/* V21: Visor urbano detallado por distrito */
+#urbanView{display:none;background:white;border:1px solid #d1e0e9;border-radius:12px;padding:16px;margin-top:14px}
+.urbanToolbar{background:#fff;padding:12px;border:1px solid #cbdce8;border-radius:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
+.urbanLayout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);gap:15px;align-items:start}
+.urbanMapPanel{padding:0;overflow:hidden}
+#urbanFrame{display:none;width:100%;height:calc(100vh - 250px);min-height:720px;border:0;background:#eef5f8}#urbanFrame.urbanActive{display:block}#urbanPlaceholder{height:calc(100vh - 250px);min-height:720px;background:#eef5f8}#urbanPlaceholder svg{width:100%;height:100%;max-height:720px}#urbanPlaceholder.urbanHidden{display:none}.urbanMapPanel{position:relative}
+.urbanSide{display:block}
+#urbanTitle{margin:0 0 5px;color:#075578;font-size:22px}
+#urbanMeta{font-size:12px;color:#5a7081;margin:0 0 12px}
+.urbanNote{font-size:12px;color:#577082;line-height:1.45;border-top:1px solid #e4edf3;margin-top:12px;padding-top:10px}
+.urbanPlaceholder{display:grid;place-items:center;height:100%;min-height:420px;color:#66808d;padding:24px;text-align:center}
+.urbanSelectLabel{min-width:280px}
+@media(max-width:1100px){.urbanLayout{grid-template-columns:1fr}#urbanFrame{height:72vh;min-height:520px}}
+@media print{#urbanView{display:none !important}}
+
+/* V24: ocultar elementos solicitados por el usuario */
+#tabDistrict,
+#resetBtn,
+#status,
+.districtQuickLabel{display:none !important;}
+
+/* V25: respaldo visible cuando no se descargan polígonos */
+#mapHolder{position:relative}
+#mapHolder .mapFallbackFrame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#e8f0f5}
+#mapHolder .mapFallbackInfo{position:absolute;bottom:15px;left:50%;transform:translateX(-50%);width:max-content;max-width:90%;background:#fff;padding:10px 15px;border-radius:9px;font-size:12px;color:#075578;border:1px solid #b9d7e4;box-shadow:0 3px 15px #14384933;z-index:4;text-align:center}
+
+.populationFallback{height:100%;width:100%;overflow:auto;padding:24px;background:#f5f9fc}
+.fallbackNotice{font-size:14px;line-height:1.5;color:#315670;padding:14px 16px;background:white;border:1px solid #d1e0e9;border-radius:9px;margin-bottom:18px}
+.fallbackBars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+.fallbackRow{display:flex;align-items:center;gap:9px;padding:8px 10px;color:#19435d;background:white;border:1px solid #d5e5ed;border-radius:7px;text-align:left;min-width:0;cursor:pointer}
+.fallbackRow:hover{border-color:#087c9c;background:#eef9ff}
+.fallbackName{width:45%;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.fallbackTrack{flex:1;background:#e6eff4;border-radius:9px;height:9px;overflow:hidden}
+.fallbackFill{display:block;background:#368fb8;height:100%;border-radius:9px}
+.fallbackValue{width:66px;text-align:right;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+@media(max-width:950px){.fallbackBars{grid-template-columns:1fr}}
+
+#openStreetExternal{font-weight:700;box-shadow:0 2px 6px #145b4430}
+#urbanFrame{background:#eef5f8}
+
+.urban-multi{position:relative;min-width:235px;align-self:end;font-size:12px;z-index:75}.urban-multi summary{cursor:pointer;border:1px solid #b5ccdc;border-radius:7px;background:#e3edf4;color:#164c6b;font-weight:700;padding:12px;list-style:none}.urban-multi-panel{position:absolute;top:100%;left:0;width:340px;max-width:90vw;background:white;border:1px solid #bfd3df;border-radius:8px;padding:10px;box-shadow:0 8px 22px #143d5540}.urban-multi-actions{display:flex;gap:7px;margin-bottom:8px}.urban-multi-actions button{font-size:12px;padding:8px}.urban-multi-checks{max-height:280px;overflow:auto;display:grid;gap:2px}.urban-multi-checks label{display:flex;align-items:center;gap:7px;padding:5px;font-size:12px;font-weight:500}.urban-multi-checks input{height:16px;width:16px}.urban-boundary path{fill-opacity:.05}
+
+/* V35 — Panel de establecimientos EsSalud compacto */
+@media (min-width:1101px){
+  #urbanView .urbanLayout{grid-template-columns:minmax(0,1fr) 275px;gap:10px}
+  #urbanView .urbanSide{max-width:275px;width:100%;padding:10px}
+}
+#urbanView .urbanSide h2{font-size:19px;margin:0 0 4px}
+#urbanView .urbanSide #urbanMeta{font-size:11px;margin-bottom:10px}
+#urbanView .urbanSide .iprows{gap:7px}
+#urbanView .urbanSide .ipitem{font-size:11px}
+#urbanView .urbanSide .iptitle{gap:5px;align-items:flex-start;margin-bottom:3px}
+#urbanView .urbanSide .iptitle strong{font-size:9.5px;line-height:1.25;min-width:0;flex:1}
+#urbanView .urbanSide .iptitle span{font-size:9px;white-space:normal;text-align:right;min-width:70px}
+#urbanView .urbanSide .track{height:9px}
+#urbanView .urbanSide .urbanNote{font-size:10px;line-height:1.4;margin-top:10px;padding-top:8px}
+@media(max-width:1100px){#urbanView .urbanLayout{grid-template-columns:1fr}#urbanView .urbanSide{max-width:none}}
+</style></head>
+<body>
+<header><div>ESSALUD · DISTRIBUCIÓN TERRITORIAL DE ASEGURADOS</div><h1>Mapa general y detalle de calles de los 44 distritos · V40</h1><p>15 establecimientos EsSalud · 44 distritos · 1,688,279 asegurados</p></header>
+<main>
+<nav class="viewtabs" aria-label="Vistas cartográficas">
+<button type="button" id="tabGeneral" class="active" aria-pressed="true">▦ Mapa general (selección y calles)</button>
+<button type="button" id="tabDistrict" aria-pressed="false">▣ Mapas individuales por distrito</button>
+<button type="button" id="tabUrban" aria-pressed="false">▤ Visor detallado del distrito</button>
+</nav>
+<div id="generalView">
+<div class="toolbar">
+<label>Buscar distrito<input id="search" type="search" placeholder="Ej. ATE"></label>
+<label>Distrito<select id="districtSelect"><option value="">Todos los distritos</option></select></label>
+<div class="multiControl"><button type="button" class="alt" id="multiOpen" aria-expanded="false">☑ Seleccionar varios distritos <span id="multiCount">(0)</span></button><div id="multiPanel" class="multiPanel" hidden><div class="multiBtns"><button type="button" id="multiAll" class="alt">Marcar todos</button><button type="button" id="multiNone" class="alt">Limpiar selección</button></div><div id="multiChoices" class="multiChoices"></div></div></div><button type="button" class="alt" id="expandMap">Ampliar mapa</button><button id="printBtn">Imprimir / Guardar PDF</button>
+<button id="resetBtn" class="alt">Restablecer vista</button>
+<span id="status" class="status">Preparando cartografía…</span><label style="font-size:12px">Recuperar contornos GeoJSON<input id="geoLocalMain" type="file" accept=".geojson,.json,application/json" style="width:210px;font-size:11px" /></label><label class="districtQuickLabel">Lista de distritos y asegurados<select id="districtQuick" aria-label="Lista desplegable de los 44 distritos"><option value="">▼ Seleccionar distrito (44)</option></select></label><button type="button" id="quickDistrict" class="quickSwitch" title="Abrir fichas individuales de los 44 distritos">▣ Ver mapas por distrito</button><button type="button" id="quickUrban" class="quickSwitch alt" title="Abrir visor detallado del distrito">▤ Ver detalle urbano</button>
+</div>
+<div class="summary">
+<div class="kpi"><span>Distritos</span><b id="kDistricts">44</b></div>
+<div class="kpi"><span>Población total</span><b id="kTotal">1,688,279</b></div>
+<div class="kpi"><span>Establecimientos EsSalud</span><b id="kIpress">15</b></div>
+<div class="kpi"><span>Distrito seleccionado</span><b id="kSel">Todos</b></div>
+</div>
+<div class="layout">
+<section class="panel">
+<div id="mapWrap"><div id="tooltip" class="tooltip"></div><div id="mapHolder"><div class="empty">Preparando resumen distrital…</div></div></div>
+<div class="legend"><b>Intensidad por población total asegurada del distrito</b><div class="scale"><span class="sw" style="background:var(--c1)"></span><span class="sw" style="background:var(--c2)"></span><span class="sw" style="background:var(--c3)"></span><span class="sw" style="background:var(--c4)"></span><span class="sw" style="background:var(--c5)"></span></div><span id="legendRange"></span></div>
+<p class="note">Haz clic en un distrito para ver la distribución de asegurados entre los establecimientos EsSalud asignados. El color del mapa refleja el total de asegurados del distrito.</p>
+</section>
+<aside class="panel side" id="detailPanel" hidden>
+<h2 id="sideTitle">Todos los distritos</h2>
+<div id="sideMeta" class="small">Selecciona un distrito del mapa o de la lista.</div>
+<div id="sideBody" class="iprows"><div class="empty">Aquí verás el detalle de la distribución por establecimiento EsSalud.</div></div>
+
+</aside>
+</div>
+</div><section id="districtView" aria-label="Mapas distritales"><iframe id="districtFrame" title="Atlas de 44 mapas distritales con población proporcional por establecimiento EsSalud" loading="lazy" srcdoc="&lt;!DOCTYPE html&gt;&lt;html lang=&quot;es&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;UTF-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;&lt;title&gt;44 mapas distritales V7 · Importación de cartografía · Distribución de asegurados por IPRESS&lt;/title&gt;&lt;style&gt;
+:root{font-family:Arial,Segoe UI,sans-serif;color:#193148;background:#edf3f8}*{box-sizing:border-box}body{margin:0}header{background:#075578;color:#fff;padding:21px 3vw}header h1{margin:5px 0;font-size:26px}header p{margin:5px 0;font-size:13px;opacity:.95}main{max-width:1400px;margin:auto;padding:18px}nav{background:white;padding:13px;border:1px solid #cbdce8;border-radius:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}nav label{font-weight:700;font-size:12px;display:grid;gap:5px}input,select,button{font-size:14px;padding:10px;border:1px solid #b5ccdc;border-radius:7px;background:white}button{background:#087c9c;color:white;border:0;cursor:pointer;font-weight:700}button.alt{background:#e3edf4;color:#164c6b}.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px}.kpi{background:white;padding:12px 17px;border-radius:9px;flex:1;min-width:135px;border:1px solid #d9e3ec}.kpi span{display:block;color:#5a7081;font-size:12px}.kpi b{font-size:22px;color:#075578}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.district{background:white;border:1px solid #d1e0e9;border-radius:12px;padding:16px;break-inside:avoid;min-width:0}.district h2{font-size:19px;color:#075578;margin:0 0 7px}.district .small{font-size:12px;color:#557080;margin:0 0 13px}.content{display:grid;grid-template-columns:minmax(130px,.9fr) minmax(200px,1.2fr);gap:12px;align-items:start}.geom{height:240px;border-radius:8px;background:#eef5f8;border:1px solid #d6e4ed;display:grid;place-items:center;position:relative;overflow:hidden}.geom svg{width:95%;height:95%;display:block}.geom .msg{padding:12px;font-size:12px;text-align:center;color:#68808c}.iprows{display:grid;gap:10px}.ipitem{font-size:12px}.iptitle{display:flex;justify-content:space-between;gap:7px;margin-bottom:4px}.iptitle strong{font-size:12px}.iptitle span{white-space:nowrap;font-weight:700}.track{height:12px;background:#e6eff3;border-radius:50px;overflow:hidden}.fill{height:100%;border-radius:50px}.foot{border-top:1px solid #e3eaf0;padding-top:8px;margin-top:11px;font-size:11px;color:#657b8a}.notice{font-size:12px;color:#526d80;line-height:1.45;margin-bottom:14px}.hidden{display:none!important}#status{font-size:12px;color:#527086}footer{font-size:11px;color:#647b8a;max-width:1400px;margin:10px auto 25px;padding:0 18px}@media(max-width:1000px){.cards{grid-template-columns:1fr}}@media(max-width:560px){.content{grid-template-columns:1fr}.geom{height:240px}}@page{size:A4 landscape;margin:10mm}@media print{header{padding:8px 15px;background:white;color:#075578}nav,.summary,.notice,footer,#status{display:none!important}main{max-width:none;padding:0}.cards{display:block}.district{border:0;border-radius:0;box-shadow:none;break-after:page;break-inside:avoid;height:180mm;margin:0;padding:7mm 9mm;page-break-after:always}.district:last-child{break-after:auto;page-break-after:auto}.district h2{font-size:24px}.district .small{font-size:14px}.content{grid-template-columns:1.2fr 1fr;gap:22px}.geom{height:132mm}.ipitem{font-size:15px}.iptitle strong{font-size:15px}.foot{font-size:12px}header{display:none}}
+&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;header&gt;&lt;div&gt;ESSALUD · DISTRIBUCIÓN TERRITORIAL DE ASEGURADOS&lt;/div&gt;&lt;h1&gt;Atlas distrital por establecimientos EsSalud · V9 (distribución proporcional por distrito)&lt;/h1&gt;&lt;p&gt;15 establecimientos EsSalud · Población total: 1,688,279 asegurados · Distribución proporcional por distrito&lt;/p&gt;&lt;/header&gt;&lt;main&gt;
+&lt;nav&gt;&lt;label&gt;Buscar distrito&lt;input id=&quot;search&quot; type=&quot;search&quot; placeholder=&quot;Ej. LA VICTORIA&quot;&gt;&lt;/label&gt;&lt;label&gt;Distrito&lt;select id=&quot;sel&quot;&gt;&lt;option value=&quot;&quot;&gt;Todos los distritos (44)&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;IPRESS&lt;select id=&quot;ipress&quot;&gt;&lt;option value=&quot;&quot;&gt;Todos los establecimientos EsSalud&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;import-label&quot;&gt;Importar límites GeoJSON (para completar mapas)&lt;input id=&quot;geoImport&quot; type=&quot;file&quot; accept=&quot;.geojson,.json,application/json&quot; style=&quot;display:block;max-width:230px&quot;/&gt;&lt;/label&gt;&lt;button id=&quot;print&quot;&gt;Imprimir los mapas visibles / Guardar PDF&lt;/button&gt;&lt;button class=&quot;alt&quot; id=&quot;clear&quot;&gt;Restablecer&lt;/button&gt;&lt;span id=&quot;status&quot;&gt;Preparando cartografía…&lt;/span&gt;&lt;/nav&gt;
+&lt;div id=&quot;geoInfo&quot; class=&quot;notice&quot; style=&quot;margin:10px 0&quot;&gt;Cada ficha muestra el distrito y, dentro del contorno, una distribución proporcional referencial de la población asegurada entre los establecimientos EsSalud asignados. Los colores del mapa corresponden a las mismas barras de la derecha.&lt;/div&gt;&lt;div class=&quot;summary&quot;&gt;&lt;div class=&quot;kpi&quot;&gt;&lt;span&gt;Distritos visibles&lt;/span&gt;&lt;b id=&quot;nd&quot;&gt;44&lt;/b&gt;&lt;/div&gt;&lt;div class=&quot;kpi&quot;&gt;&lt;span&gt;Población en distritos visibles&lt;/span&gt;&lt;b id=&quot;nt&quot;&gt;1,688,279&lt;/b&gt;&lt;/div&gt;&lt;div class=&quot;kpi&quot;&gt;&lt;span&gt;IPRESS en distritos visibles&lt;/span&gt;&lt;b id=&quot;ni&quot;&gt;15&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p class=&quot;notice&quot;&gt;&lt;b&gt;Lectura:&lt;/b&gt; cada contorno corresponde al distrito completo. Las barras indican cómo se distribuye la población asegurada registrada en dicho distrito entre las IPRESS. &lt;b&gt;No se está asignando una zona, calle o manzana a una IPRESS.&lt;/b&gt; Los límites distritales se seleccionan por departamento Lima y provincia Lima/Huarochirí, evitando mezclar distritos homónimos. En la impresión solo aparecen los distritos filtrados.&lt;/p&gt;
+&lt;section id=&quot;cards&quot; class=&quot;cards&quot;&gt;&lt;/section&gt;&lt;/main&gt;&lt;footer&gt;Fuente de población: tabla facilitada por el usuario. Geometría: capa de límites distritales de Rodasluis/Peru-maps (basada en INEI), con coincidencia de provincia y UBIGEO cuando está disponible. Coincidencia comprobada por departamento y provincia. Para uso estadístico, verificar UBIGEO y geometría oficial antes de un informe normativo. «SURCO» corresponde al distrito Surco de la provincia de Huarochirí, no Santiago de Surco.&lt;/footer&gt;
+&lt;script&gt;const RAW=[{&quot;ipress&quot;:&quot;C.M. CASAPALCA&quot;,&quot;distrito&quot;:&quot;CHICLA&quot;,&quot;asegurados&quot;:1028},{&quot;ipress&quot;:&quot;CAP III ALFREDO PIAZZA ROBERTS&quot;,&quot;distrito&quot;:&quot;LA VICTORIA&quot;,&quot;asegurados&quot;:40795},{&quot;ipress&quot;:&quot;CAP III EL AGUSTINO&quot;,&quot;distrito&quot;:&quot;EL AGUSTINO&quot;,&quot;asegurados&quot;:77170},{&quot;ipress&quot;:&quot;CAP III HUAYCAN&quot;,&quot;distrito&quot;:&quot;ATE&quot;,&quot;asegurados&quot;:29768},{&quot;ipress&quot;:&quot;CAP III INDEPENDENCIA&quot;,&quot;distrito&quot;:&quot;INDEPENDENCIA&quot;,&quot;asegurados&quot;:90781},{&quot;ipress&quot;:&quot;CAP III SAN BORJA&quot;,&quot;distrito&quot;:&quot;SAN BORJA&quot;,&quot;asegurados&quot;:68226},{&quot;ipress&quot;:&quot;H.I AURELIO DIAZ-UFANO Y PERAL&quot;,&quot;distrito&quot;:&quot;SAN JUAN DE LURIGANCHO&quot;,&quot;asegurados&quot;:429319},{&quot;ipress&quot;:&quot;H.I JORGE VOTO BERNALES CORPANCHO&quot;,&quot;distrito&quot;:&quot;ATE&quot;,&quot;asegurados&quot;:28634},{&quot;ipress&quot;:&quot;H.I JORGE VOTO BERNALES CORPANCHO&quot;,&quot;distrito&quot;:&quot;EL AGUSTINO&quot;,&quot;asegurados&quot;:5053},{&quot;ipress&quot;:&quot;H.I JORGE VOTO BERNALES CORPANCHO&quot;,&quot;distrito&quot;:&quot;SANTA ANITA&quot;,&quot;asegurados&quot;:118937},{&quot;ipress&quot;:&quot;H.II RAMON CASTILLA&quot;,&quot;distrito&quot;:&quot;INDEPENDENCIA&quot;,&quot;asegurados&quot;:6222},{&quot;ipress&quot;:&quot;H.II RAMON CASTILLA&quot;,&quot;distrito&quot;:&quot;LIMA&quot;,&quot;asegurados&quot;:191042},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;ANTIOQUIA&quot;,&quot;asegurados&quot;:11},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;ATE&quot;,&quot;asegurados&quot;:206494},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;CALLAHUANCA&quot;,&quot;asegurados&quot;:8},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;CARAMPOMA&quot;,&quot;asegurados&quot;:5},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;CHACLACAYO&quot;,&quot;asegurados&quot;:1794},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;CHICLA&quot;,&quot;asegurados&quot;:28},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;HUACHUPAMPA&quot;,&quot;asegurados&quot;:7},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;HUANZA&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;HUAROCHIRI&quot;,&quot;asegurados&quot;:11},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;LAHUAYTAMBO&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;LANGA&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;LARAOS&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;LURIGANCHO&quot;,&quot;asegurados&quot;:4530},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;MARIATANA&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;MATUCANA&quot;,&quot;asegurados&quot;:72},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;RICARDO PALMA&quot;,&quot;asegurados&quot;:99},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN ANDRES DE TUPICOCHA&quot;,&quot;asegurados&quot;:4},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN ANTONIO&quot;,&quot;asegurados&quot;:269},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN BARTOLOME&quot;,&quot;asegurados&quot;:14},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN DAMIAN&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN JOSE DE LOS CHORRILLOS&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN JUAN DE IRIS&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN JUAN DE TANTARANCHE&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN LORENZO DE QUINTI&quot;,&quot;asegurados&quot;:2},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN MATEO&quot;,&quot;asegurados&quot;:69},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN MATEO DE OTAO&quot;,&quot;asegurados&quot;:11},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SAN PEDRO DE CASTA&quot;,&quot;asegurados&quot;:8},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SANTA CRUZ DE COCACHACRA&quot;,&quot;asegurados&quot;:61},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SANTA EULALIA&quot;,&quot;asegurados&quot;:181},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SANTIAGO DE ANCHUCAYA&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SANTIAGO DE TUNA&quot;,&quot;asegurados&quot;:1},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SANTO DOMINGO DE LOS OLLEROS&quot;,&quot;asegurados&quot;:41},{&quot;ipress&quot;:&quot;H.II VITARTE&quot;,&quot;distrito&quot;:&quot;SURCO&quot;,&quot;asegurados&quot;:20},{&quot;ipress&quot;:&quot;H.III HOSPITAL DE EMERGENCIAS GRAU&quot;,&quot;distrito&quot;:&quot;ATE&quot;,&quot;asegurados&quot;:3559},{&quot;ipress&quot;:&quot;H.III HOSPITAL DE EMERGENCIAS GRAU&quot;,&quot;distrito&quot;:&quot;LA VICTORIA&quot;,&quot;asegurados&quot;:9648},{&quot;ipress&quot;:&quot;H.III HOSPITAL DE EMERGENCIAS GRAU&quot;,&quot;distrito&quot;:&quot;RIMAC&quot;,&quot;asegurados&quot;:8130},{&quot;ipress&quot;:&quot;H.III HOSPITAL DE EMERGENCIAS GRAU&quot;,&quot;distrito&quot;:&quot;SAN BORJA&quot;,&quot;asegurados&quot;:18415},{&quot;ipress&quot;:&quot;H.III HOSPITAL DE EMERGENCIAS GRAU&quot;,&quot;distrito&quot;:&quot;SAN LUIS&quot;,&quot;asegurados&quot;:4137},{&quot;ipress&quot;:&quot;P.M. CONSTRUCCION CIVIL&quot;,&quot;distrito&quot;:&quot;LIMA&quot;,&quot;asegurados&quot;:122},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;ANTIOQUIA&quot;,&quot;asegurados&quot;:156},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;CALLAHUANCA&quot;,&quot;asegurados&quot;:185},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;CARAMPOMA&quot;,&quot;asegurados&quot;:118},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;CHACLACAYO&quot;,&quot;asegurados&quot;:20616},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;HUACHUPAMPA&quot;,&quot;asegurados&quot;:114},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;HUANZA&quot;,&quot;asegurados&quot;:180},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;HUAROCHIRI&quot;,&quot;asegurados&quot;:258},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;LAHUAYTAMBO&quot;,&quot;asegurados&quot;:29},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;LANGA&quot;,&quot;asegurados&quot;:96},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;LARAOS&quot;,&quot;asegurados&quot;:47},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;LURIGANCHO&quot;,&quot;asegurados&quot;:73126},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;MARIATANA&quot;,&quot;asegurados&quot;:152},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;MATUCANA&quot;,&quot;asegurados&quot;:1786},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;RICARDO PALMA&quot;,&quot;asegurados&quot;:2374},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN ANDRES DE TUPICOCHA&quot;,&quot;asegurados&quot;:65},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN ANTONIO&quot;,&quot;asegurados&quot;:7765},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN BARTOLOME&quot;,&quot;asegurados&quot;:321},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN DAMIAN&quot;,&quot;asegurados&quot;:149},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN JOSE DE LOS CHORRILLOS&quot;,&quot;asegurados&quot;:39},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN JUAN DE IRIS&quot;,&quot;asegurados&quot;:87},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN JUAN DE TANTARANCHE&quot;,&quot;asegurados&quot;:28},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN LORENZO DE QUINTI&quot;,&quot;asegurados&quot;:93},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN MATEO&quot;,&quot;asegurados&quot;:1917},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN MATEO DE OTAO&quot;,&quot;asegurados&quot;:264},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN PEDRO DE CASTA&quot;,&quot;asegurados&quot;:138},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SAN PEDRO DE HUANCAYRE&quot;,&quot;asegurados&quot;:40},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANGALLAYA&quot;,&quot;asegurados&quot;:52},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANTA CRUZ DE COCACHACRA&quot;,&quot;asegurados&quot;:782},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANTA EULALIA&quot;,&quot;asegurados&quot;:4452},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANTIAGO DE ANCHUCAYA&quot;,&quot;asegurados&quot;:61},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANTIAGO DE TUNA&quot;,&quot;asegurados&quot;:56},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SANTO DOMINGO DE LOS OLLEROS&quot;,&quot;asegurados&quot;:744},{&quot;ipress&quot;:&quot;POL. CHOSICA&quot;,&quot;distrito&quot;:&quot;SURCO&quot;,&quot;asegurados&quot;:489},{&quot;ipress&quot;:&quot;POL. FRANCISCO PIZARRO&quot;,&quot;distrito&quot;:&quot;RIMAC&quot;,&quot;asegurados&quot;:95361},{&quot;ipress&quot;:&quot;POL. SAN LUIS&quot;,&quot;distrito&quot;:&quot;ATE&quot;,&quot;asegurados&quot;:12055},{&quot;ipress&quot;:&quot;POL. SAN LUIS&quot;,&quot;distrito&quot;:&quot;LA VICTORIA&quot;,&quot;asegurados&quot;:85969},{&quot;ipress&quot;:&quot;POL. SAN LUIS&quot;,&quot;distrito&quot;:&quot;SAN LUIS&quot;,&quot;asegurados&quot;:33374}];const $=id=&gt;document.getElementById(id);const nfmt=x=&gt;x.toLocaleString(&#x27;en-US&#x27;);const pct=(a,b)=&gt;(100*a/b).toFixed(2)+&#x27;%&#x27;;const norm=s=&gt;String(s||&#x27;&#x27;).normalize(&#x27;NFD&#x27;).replace(/[\u0300-\u036f]/g,&#x27;&#x27;).toUpperCase().replace(/[^A-Z0-9 ]/g,&#x27; &#x27;).replace(/\s+/g,&#x27; &#x27;).trim();
+const groups=new Map();for(const r of RAW){if(!groups.has(r.distrito))groups.set(r.distrito,[]);groups.get(r.distrito).push(r)}const colors=[&#x27;#0b76ac&#x27;,&#x27;#e49341&#x27;,&#x27;#239c88&#x27;,&#x27;#895cb7&#x27;,&#x27;#df6688&#x27;,&#x27;#6f8b33&#x27;,&#x27;#1c879c&#x27;,&#x27;#af6127&#x27;];const ordered=[...groups.keys()].sort((a,b)=&gt;a.localeCompare(b,&#x27;es&#x27;));
+for(const d of ordered){const opt=document.createElement(&#x27;option&#x27;);opt.value=opt.textContent=d;$(&#x27;sel&#x27;).append(opt)}for(const n of [...new Set(RAW.map(r=&gt;r.ipress))].sort()){const opt=document.createElement(&#x27;option&#x27;);opt.value=opt.textContent=n;$(&#x27;ipress&#x27;).append(opt)}
+const node=(tag,cls,txt)=&gt;{let x=document.createElement(tag);if(cls)x.className=cls;if(txt!==undefined)x.textContent=txt;return x};function show(){const q=norm($(&#x27;search&#x27;).value),selected=$(&#x27;sel&#x27;).value,ip=$(&#x27;ipress&#x27;).value;let ds=ordered.filter(d=&gt;(!selected||d===selected)&amp;&amp;(!q||norm(d).includes(q))&amp;&amp;(!ip||groups.get(d).some(x=&gt;x.ipress===ip)));$(&#x27;cards&#x27;).replaceChildren();let grand=0,ips=new Set();for(const d of ds){let rows=[...groups.get(d)].sort((a,b)=&gt;b.asegurados-a.asegurados),total=rows.reduce((s,r)=&gt;s+r.asegurados,0);grand+=total;rows.forEach(r=&gt;ips.add(r.ipress));let card=node(&#x27;article&#x27;,&#x27;district&#x27;);card.dataset.district=d;card.append(node(&#x27;h2&#x27;,&#x27;&#x27;,d),node(&#x27;p&#x27;,&#x27;small&#x27;,nfmt(total)+&#x27; asegurados · &#x27;+rows.length+&#x27; establecimiento&#x27;+(rows.length===1?&#x27;&#x27;:&#x27;s&#x27;)+&#x27; EsSalud asignado&#x27;+(rows.length===1?&#x27;&#x27;:&#x27;s&#x27;)));let content=node(&#x27;div&#x27;,&#x27;content&#x27;),geo=node(&#x27;div&#x27;,&#x27;geom&#x27;),msg=node(&#x27;div&#x27;,&#x27;msg&#x27;,&#x27;Contorno geográfico pendiente de carga&#x27;);geo.append(msg);content.append(geo);let ir=node(&#x27;div&#x27;,&#x27;iprows&#x27;);rows.forEach((r,i)=&gt;{let item=node(&#x27;div&#x27;,&#x27;ipitem&#x27;),title=node(&#x27;div&#x27;,&#x27;iptitle&#x27;),name=node(&#x27;strong&#x27;,&#x27;&#x27;,r.ipress),fig=node(&#x27;span&#x27;,&#x27;&#x27;,nfmt(r.asegurados)+&#x27; · &#x27;+pct(r.asegurados,total)),track=node(&#x27;div&#x27;,&#x27;track&#x27;),fill=node(&#x27;div&#x27;,&#x27;fill&#x27;);fill.style.width=(r.asegurados/total*100)+&#x27;%&#x27;;fill.style.background=colors[i%colors.length];track.append(fill);title.append(name,fig);item.append(title,track);ir.append(item)});content.append(ir);card.append(content,node(&#x27;div&#x27;,&#x27;foot&#x27;,&#x27;Total distrital: &#x27;+nfmt(total)+&#x27; · Todos los establecimientos pertenecen a EsSalud. El relleno interno del mapa muestra una distribución proporcional referencial de asegurados por establecimiento dentro del distrito.&#x27;));$(&#x27;cards&#x27;).append(card);if(window.MAP_FEATURES)drawMap(card,d)}$(&#x27;nd&#x27;).textContent=ds.length;$(&#x27;nt&#x27;).textContent=nfmt(grand);$(&#x27;ni&#x27;).textContent=ips.size;if(window.MAP_FEATURES){const ok=ds.filter(d=&gt;mapsFor(d).length).length;$(&#x27;status&#x27;).textContent=&#x27;Contornos: &#x27;+ok+&#x27;/&#x27;+ds.length+&#x27; distritos visibles&#x27;}}
+function geoname(p){return p.nombre||p.distrito||p.DISTRITO||p.NOMBDIST||p.NOMBDISTRI||p.NOM_DIS||p.NOMB_DIST||p.name||p.NOMBRE||p.NOMDISTRITO||p.nom_dist||p.nombre||p.NOMBDIST||&#x27;&#x27;}
+function department(p){return norm(p.nombre_departamento||p.departamento||p.DEPARTAMENTO||p.NOMBDEP||p.NOMBDPTO||p.NOMDEPARTAMENTO||p.NOM_DEP||&#x27;&#x27;)}
+function province(p){return norm(p.nombre_provincia||p.provincia_nombre||p.provincia||p.PROVINCIA||p.NOMBPROV||p.NOM_PROV||&#x27;&#x27;)}
+const HUAROCHIRI=new Set([&#x27;ANTIOQUIA&#x27;,&#x27;CALLAHUANCA&#x27;,&#x27;CARAMPOMA&#x27;,&#x27;CHICLA&#x27;,&#x27;HUACHUPAMPA&#x27;,&#x27;HUANZA&#x27;,&#x27;HUAROCHIRI&#x27;,&#x27;LAHUAYTAMBO&#x27;,&#x27;LANGA&#x27;,&#x27;LARAOS&#x27;,&#x27;MARIATANA&#x27;,&#x27;MATUCANA&#x27;,&#x27;RICARDO PALMA&#x27;,&#x27;SAN ANDRES DE TUPICOCHA&#x27;,&#x27;SAN ANTONIO&#x27;,&#x27;SAN BARTOLOME&#x27;,&#x27;SAN DAMIAN&#x27;,&#x27;SAN JOSE DE LOS CHORRILLOS&#x27;,&#x27;SAN JUAN DE IRIS&#x27;,&#x27;SAN JUAN DE TANTARANCHE&#x27;,&#x27;SAN LORENZO DE QUINTI&#x27;,&#x27;SAN MATEO&#x27;,&#x27;SAN MATEO DE OTAO&#x27;,&#x27;SAN PEDRO DE CASTA&#x27;,&#x27;SAN PEDRO DE HUANCAYRE&#x27;,&#x27;SANGALLAYA&#x27;,&#x27;SANTA CRUZ DE COCACHACRA&#x27;,&#x27;SANTA EULALIA&#x27;,&#x27;SANTIAGO DE ANCHUCAYA&#x27;,&#x27;SANTIAGO DE TUNA&#x27;,&#x27;SANTO DOMINGO DE LOS OLLEROS&#x27;,&#x27;SURCO&#x27;]);
+function mapsFor(d){const expected=HUAROCHIRI.has(d)?&#x27;1507&#x27;:&#x27;1501&#x27;;return window.MAP_FEATURES.filter(f=&gt;{const p=f.properties||{};const id=String(p.ubigeo||p.UBIGEO||p.CODIGO||p.codigo||p.CODDIST||p.codigo_ubigeo||p.codigo_distrito||p.code||&#x27;&#x27;).padStart(6,&#x27;0&#x27;);const a=norm(geoname(p)||p.nombre||p.NOMBDIST);const aliases={&#x27;LIMA&#x27;:[&#x27;LIMA&#x27;,&#x27;CERCADO DE LIMA&#x27;],&#x27;SAN JOSE DE LOS CHORRILLOS&#x27;:[&#x27;SAN JOSE DE LOS CHORRILLOS&#x27;,&#x27;CUENCA&#x27;],&#x27;LARAOS&#x27;:[&#x27;LARAOS&#x27;,&#x27;SAN PEDRO DE LARAOS&#x27;],&#x27;SAN PEDRO DE CASTA&#x27;:[&#x27;SAN PEDRO DE CASTA&#x27;,&#x27;CASTA&#x27;],&#x27;SURCO&#x27;:[&#x27;SURCO&#x27;],&#x27;LURIGANCHO&#x27;:[&#x27;LURIGANCHO&#x27;,&#x27;LURIGANCHO CHOSICA&#x27;]};const knownId={&#x27;SAN JOSE DE LOS CHORRILLOS&#x27;:&#x27;150706&#x27;,&#x27;LARAOS&#x27;:&#x27;150712&#x27;};const matches=aliases[d]||[norm(d)];if(knownId[d]&amp;&amp;id===knownId[d])return true;if(id.length===6&amp;&amp;id.startsWith(&#x27;15&#x27;)&amp;&amp;id.slice(0,4)!==expected)return false;const pr=province(p);if(!id.startsWith(&#x27;15&#x27;)&amp;&amp;pr&amp;&amp;pr!==(expected===&#x27;1507&#x27;?&#x27;HUAROCHIRI&#x27;:&#x27;LIMA&#x27;))return false;return matches.includes(a)})}
+
+function drawMap(card,d){let features=mapsFor(d),holder=card.querySelector(&#x27;.geom&#x27;);holder.replaceChildren();if(!features.length){holder.append(node(&#x27;div&#x27;,&#x27;msg&#x27;,&#x27;Polígono no disponible en la fuente cargada. Revisar correspondencia de UBIGEO.&#x27;));return}let rings=[];for(const f of features){const g=f.geometry;if(!g)continue;const polys=g.type===&#x27;Polygon&#x27;?[g.coordinates]:g.type===&#x27;MultiPolygon&#x27;?g.coordinates:[];for(const poly of polys)for(const ring of poly.slice(0,1))if(ring.length&gt;2)rings.push(ring)}if(!rings.length){holder.append(node(&#x27;div&#x27;,&#x27;msg&#x27;,&#x27;Geometría sin coordenadas disponibles&#x27;));return}const xs=rings.flatMap(r=&gt;r.map(p=&gt;p[0])),ys=rings.flatMap(r=&gt;r.map(p=&gt;p[1]));let xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);const center=(ymax+ymin)/2,scale=Math.cos(center*Math.PI/180);let w=(xmax-xmin)*scale,h=(ymax-ymin),factor=Math.min(360/Math.max(w,0.00001),215/Math.max(h,0.00001));if((xmax-xmin)&gt;2||(ymax-ymin)&gt;2){holder.append(node(&#x27;div&#x27;,&#x27;msg&#x27;,&#x27;Geometría geográfica inconsistente; revisar UBIGEO.&#x27;));return}const rows=[...groups.get(d)].sort((a,b)=&gt;b.asegurados-a.asegurados),total=rows.reduce((s,r)=&gt;s+r.asegurados,0);const svg=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;svg&#x27;);svg.setAttribute(&#x27;viewBox&#x27;,&#x27;0 0 400 255&#x27;);svg.setAttribute(&#x27;role&#x27;,&#x27;img&#x27;);svg.setAttribute(&#x27;aria-label&#x27;,&#x27;Contorno y distribución proporcional de &#x27;+d);const defs=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;defs&#x27;);const clip=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;clipPath&#x27;);const clipId=&#x27;clip_&#x27;+norm(d).replace(/[^A-Z0-9]+/g,&#x27;_&#x27;);clip.setAttribute(&#x27;id&#x27;,clipId);const outlineGroup=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;g&#x27;);outlineGroup.setAttribute(&#x27;fill&#x27;,&#x27;none&#x27;);outlineGroup.setAttribute(&#x27;stroke&#x27;,&#x27;#075578&#x27;);outlineGroup.setAttribute(&#x27;stroke-width&#x27;,&#x27;1.7&#x27;);outlineGroup.setAttribute(&#x27;stroke-linejoin&#x27;,&#x27;round&#x27;);outlineGroup.setAttribute(&#x27;stroke-linecap&#x27;,&#x27;round&#x27;);let pxMin=1e9,pxMax=-1e9,pyMin=1e9,pyMax=-1e9;for(let ring of rings){let projected=ring.map((pt,i)=&gt;{const x=200+((pt[0]-xmin)*scale-w/2)*factor;const y=125-((pt[1]-ymin)-h/2)*factor;pxMin=Math.min(pxMin,x);pxMax=Math.max(pxMax,x);pyMin=Math.min(pyMin,y);pyMax=Math.max(pyMax,y);return [x,y]});let dpath=projected.map((pt,i)=&gt;(i?&#x27;L&#x27;:&#x27;M&#x27;)+pt[0].toFixed(2)+&#x27;,&#x27;+pt[1].toFixed(2)).join(&#x27; &#x27;)+&#x27; Z&#x27;;let cpath=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;path&#x27;);cpath.setAttribute(&#x27;d&#x27;,dpath);cpath.setAttribute(&#x27;fill&#x27;,&#x27;#fff&#x27;);clip.append(cpath);let opath=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;path&#x27;);opath.setAttribute(&#x27;d&#x27;,dpath);outlineGroup.append(opath)}defs.append(clip);svg.append(defs);const base=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;rect&#x27;);base.setAttribute(&#x27;x&#x27;,&#x27;0&#x27;);base.setAttribute(&#x27;y&#x27;,&#x27;0&#x27;);base.setAttribute(&#x27;width&#x27;,&#x27;400&#x27;);base.setAttribute(&#x27;height&#x27;,&#x27;255&#x27;);base.setAttribute(&#x27;fill&#x27;,&#x27;#eaf4f8&#x27;);svg.append(base);const fillGroup=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;g&#x27;);fillGroup.setAttribute(&#x27;clip-path&#x27;,&#x27;url(#&#x27;+clipId+&#x27;)&#x27;);let cursor=pxMin;rows.forEach((r,i)=&gt;{const share=r.asegurados/Math.max(total,1);let next=cursor+(pxMax-pxMin)*share; if(i===rows.length-1) next=pxMax;let rect=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;rect&#x27;);rect.setAttribute(&#x27;x&#x27;,cursor.toFixed(2));rect.setAttribute(&#x27;y&#x27;,Math.max(0,pyMin-4).toFixed(2));rect.setAttribute(&#x27;width&#x27;,Math.max(1,next-cursor).toFixed(2));rect.setAttribute(&#x27;height&#x27;,Math.min(255,pyMax-pyMin+8).toFixed(2));rect.setAttribute(&#x27;fill&#x27;,colors[i%colors.length]);fillGroup.append(rect);cursor=next});svg.append(fillGroup);svg.append(outlineGroup);const badge=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;rect&#x27;);badge.setAttribute(&#x27;x&#x27;,&#x27;10&#x27;);badge.setAttribute(&#x27;y&#x27;,&#x27;10&#x27;);badge.setAttribute(&#x27;width&#x27;,&#x27;165&#x27;);badge.setAttribute(&#x27;height&#x27;,&#x27;26&#x27;);badge.setAttribute(&#x27;rx&#x27;,&#x27;6&#x27;);badge.setAttribute(&#x27;fill&#x27;,&#x27;rgba(255,255,255,0.9)&#x27;);badge.setAttribute(&#x27;stroke&#x27;,&#x27;#c4d8e4&#x27;);svg.append(badge);const badgeText=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;text&#x27;);badgeText.setAttribute(&#x27;x&#x27;,&#x27;18&#x27;);badgeText.setAttribute(&#x27;y&#x27;,&#x27;27&#x27;);badgeText.setAttribute(&#x27;font-size&#x27;,&#x27;11&#x27;);badgeText.setAttribute(&#x27;fill&#x27;,&#x27;#174d6b&#x27;);badgeText.setAttribute(&#x27;font-weight&#x27;,&#x27;700&#x27;);badgeText.textContent=&#x27;Distribución proporcional EsSalud&#x27;;svg.append(badgeText);let title=document.createElementNS(&#x27;http://www.w3.org/2000/svg&#x27;,&#x27;title&#x27;);title.textContent=&#x27;Límites geográficos de &#x27;+d+&#x27; con distribución proporcional de asegurados por establecimiento EsSalud&#x27;;svg.append(title);holder.append(svg)}
+function districtBounds(name){
+ const feats=mapsFor(name); let rings=[]; feats.forEach(f=&gt;rings.push(...polygonRingsForFeature(f)));
+ if(!rings.length) return null;
+ const xs=rings.flatMap(r=&gt;r.map(p=&gt;p[0])), ys=rings.flatMap(r=&gt;r.map(p=&gt;p[1]));
+ const minLon=Math.min(...xs), maxLon=Math.max(...xs), minLat=Math.min(...ys), maxLat=Math.max(...ys);
+ const padLon=Math.max((maxLon-minLon)*0.16,0.01), padLat=Math.max((maxLat-minLat)*0.16,0.01);
+ return {minLon:minLon-padLon, maxLon:maxLon+padLon, minLat:minLat-padLat, maxLat:maxLat+padLat, centerLon:(minLon+maxLon)/2, centerLat:(minLat+maxLat)/2};
+}
+let urbanCurrentName=&#x27;&#x27;;
+let urbanStreetMode=false;
+function showUrbanOutline(name){
+ const holder=$(&#x27;urbanPlaceholder&#x27;); holder.replaceChildren();
+ const feats=mapsFor(name), rings=feats.flatMap(polygonRingsForFeature);
+ if(!rings.length){const msg=document.createElement(&#x27;div&#x27;);msg.textContent=&#x27;No hay un contorno geográfico verificable para este distrito.&#x27;; holder.append(msg); return;}
+ const xs=rings.flatMap(r=&gt;r.map(p=&gt;p[0])),ys=rings.flatMap(r=&gt;r.map(p=&gt;p[1]));
+ const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+ const W=900,H=720,cos=Math.cos((ymax+ymin)/2*Math.PI/180),w=(xmax-xmin)*cos,h=ymax-ymin;
+ const fac=Math.min((W-90)/Math.max(w,1e-6),(H-90)/Math.max(h,1e-6));
+ const tr=pt=&gt;[W/2+(pt[0]-(xmin+xmax)/2)*cos*fac,H/2-(pt[1]-(ymin+ymax)/2)*fac];
+ const NS=&#x27;http://www.w3.org/2000/svg&#x27;,svg=document.createElementNS(NS,&#x27;svg&#x27;);svg.setAttribute(&#x27;viewBox&#x27;,&#x27;0 0 &#x27;+W+&#x27; &#x27;+H);svg.setAttribute(&#x27;role&#x27;,&#x27;img&#x27;);svg.setAttribute(&#x27;aria-label&#x27;,&#x27;Límites cartográficos del distrito &#x27;+name);
+ const g=document.createElementNS(NS,&#x27;g&#x27;);
+ rings.forEach(r=&gt;{const path=document.createElementNS(NS,&#x27;path&#x27;);path.setAttribute(&#x27;d&#x27;,pathFromRing(r,tr));path.setAttribute(&#x27;fill&#x27;,&#x27;#86c4dc&#x27;);path.setAttribute(&#x27;stroke&#x27;,&#x27;#075578&#x27;);path.setAttribute(&#x27;stroke-width&#x27;,&#x27;2.4&#x27;);path.setAttribute(&#x27;fill-rule&#x27;,&#x27;evenodd&#x27;);g.append(path)});
+ svg.append(g);
+ const title=document.createElementNS(NS,&#x27;text&#x27;);title.setAttribute(&#x27;x&#x27;,W/2);title.setAttribute(&#x27;y&#x27;,&#x27;45&#x27;);title.setAttribute(&#x27;font-size&#x27;,&#x27;24&#x27;);title.setAttribute(&#x27;font-weight&#x27;,&#x27;bold&#x27;);title.setAttribute(&#x27;fill&#x27;,&#x27;#075578&#x27;);title.setAttribute(&#x27;text-anchor&#x27;,&#x27;middle&#x27;);title.textContent=name;svg.append(title);
+ const desc=document.createElementNS(NS,&#x27;text&#x27;);desc.setAttribute(&#x27;x&#x27;,W/2);desc.setAttribute(&#x27;y&#x27;,H-22);desc.setAttribute(&#x27;font-size&#x27;,&#x27;16&#x27;);desc.setAttribute(&#x27;fill&#x27;,&#x27;#527086&#x27;);desc.setAttribute(&#x27;text-anchor&#x27;,&#x27;middle&#x27;);desc.textContent=&#x27;Contorno distrital · selecciona «Ver calles» para cartografía urbana&#x27;;svg.append(desc);
+ holder.append(svg);
+}
+function renderUrbanDistrict(name){
+ const frame=$(&#x27;urbanFrame&#x27;),holder=$(&#x27;urbanPlaceholder&#x27;),title=$(&#x27;urbanTitle&#x27;),meta=$(&#x27;urbanMeta&#x27;),side=$(&#x27;urbanSideBody&#x27;),open=$(&#x27;urbanOpenFull&#x27;),sel=$(&#x27;urbanDistrictSelect&#x27;);
+ if(name===undefined || name===null)name=&#x27;&#x27;;
+ if(sel.value!==name)sel.value=name;
+ urbanCurrentName=name;
+ frame.classList.remove(&#x27;urbanActive&#x27;);holder.classList.remove(&#x27;urbanHidden&#x27;);
+ if(!name){frame.removeAttribute(&#x27;src&#x27;);holder.replaceChildren();const msg=document.createElement(&#x27;div&#x27;);msg.className=&#x27;empty&#x27;;msg.textContent=&#x27;Selecciona un distrito en la lista superior para ver el mapa.&#x27;;holder.append(msg);$(&#x27;urbanStatus&#x27;).textContent=&#x27;Selecciona un distrito.&#x27;;title.textContent=&#x27;Visor detallado del distrito&#x27;;meta.textContent=&#x27;Mapas geográficos de los 44 distritos&#x27;;side.replaceChildren();open.href=&#x27;#&#x27;;return;}
+ const d=DIST_MAP.get(name),b=districtBounds(name);
+ if(!d){$(&#x27;urbanStatus&#x27;).textContent=&#x27;Distrito no registrado&#x27;;return;} if(!b){frame.removeAttribute(&#x27;src&#x27;);holder.replaceChildren();const aviso=document.createElement(&#x27;div&#x27;);aviso.className=&#x27;empty&#x27;;aviso.textContent=&#x27;No se descargaron los límites del distrito. Usa «Ver calles» para intentar cargar el plano urbano, o «Abrir en OpenStreetMap» para buscar el distrito directamente.&#x27;;holder.append(aviso);$(&#x27;urbanStatus&#x27;).textContent=&#x27;Sin límites descargados · Puedes consultar las calles&#x27;;open.href=&#x27;https://www.openstreetmap.org/search?query=&#x27;+encodeURIComponent(name+&#x27;, Lima, Peru&#x27;);}
+ if(b){showUrbanOutline(name); const bbox=[b.minLon,b.minLat,b.maxLon,b.maxLat].map(v=&gt;v.toFixed(6)).join(&#x27;,&#x27;);frame.src=&#x27;https://www.openstreetmap.org/export/embed.html?bbox=&#x27;+encodeURIComponent(bbox)+&#x27;&amp;layer=mapnik&#x27;;open.href=&#x27;https://www.openstreetmap.org/?mlat=&#x27;+b.centerLat.toFixed(6)+&#x27;&amp;mlon=&#x27;+b.centerLon.toFixed(6)+&#x27;#map=13/&#x27;+b.centerLat.toFixed(6)+&#x27;/&#x27;+b.centerLon.toFixed(6);}
+ title.textContent=name;meta.textContent=nfmt(d.total)+&#x27; asegurados · &#x27;+d.breakdown.length+&#x27; establecimientos EsSalud&#x27;;
+ side.replaceChildren();d.breakdown.forEach((r,i)=&gt;{const item=document.createElement(&#x27;div&#x27;);item.className=&#x27;ipitem&#x27;;const ttl=document.createElement(&#x27;div&#x27;);ttl.className=&#x27;iptitle&#x27;;const strong=document.createElement(&#x27;strong&#x27;);strong.textContent=r.ipress;const value=document.createElement(&#x27;span&#x27;);value.textContent=nfmt(r.asegurados)+&#x27; · &#x27;+pct(r.asegurados,d.total);ttl.append(strong,value);const track=document.createElement(&#x27;div&#x27;);track.className=&#x27;track&#x27;;const fill=document.createElement(&#x27;div&#x27;);fill.className=&#x27;fill&#x27;;fill.style.width=(r.asegurados/d.total*100)+&#x27;%&#x27;;fill.style.background=COLORS[i%COLORS.length];track.append(fill);item.append(ttl,track);side.append(item)});
+ if(b)$(&#x27;urbanStatus&#x27;).textContent=&#x27;Contorno recuperado · &#x27;+nfmt(d.total)+&#x27; asegurados. Para calles, pulsa «Ver calles».&#x27;;
+ urbanStreetMode=false;$(&#x27;urbanStreetToggle&#x27;).textContent=&#x27;Ver calles (OpenStreetMap)&#x27;;
+}
+async document.getElementById('openStreetExternal').addEventListener('click',()=>{const a=document.getElementById('urbanOpenFull');if(a.href && a.href!=='#')window.open(a.href,'_blank','noopener');else alert('Seleccione primero un distrito.');});
+function toggleUrbanStreets(){
+ if(!urbanCurrentName)return;
+ const frame=$(&#x27;urbanFrame&#x27;),holder=$(&#x27;urbanPlaceholder&#x27;),btn=$(&#x27;urbanStreetToggle&#x27;);
+ if(urbanStreetMode){frame.classList.remove(&#x27;urbanActive&#x27;);holder.classList.remove(&#x27;urbanHidden&#x27;);urbanStreetMode=false;btn.textContent=&#x27;Ver calles (OpenStreetMap)&#x27;;return;}
+ const name=urbanCurrentName;
+ if(!frame.getAttribute(&#x27;src&#x27;)){
+   $(&#x27;urbanStatus&#x27;).textContent=&#x27;Buscando el distrito en el mapa de calles…&#x27;;
+   try{
+     const controller=new AbortController();const timer=setTimeout(()=&gt;controller.abort(),10000);
+     const q=name+&#x27;, &#x27;+(HUAROCHIRI.has(name)?&#x27;Huarochirí&#x27;:&#x27;Lima&#x27;)+&#x27;, Lima, Perú&#x27;;
+     const res=await fetch(&#x27;https://nominatim.openstreetmap.org/search?format=jsonv2&amp;limit=5&amp;countrycodes=pe&amp;q=&#x27;+encodeURIComponent(q),{signal:controller.signal,headers:{&#x27;Accept&#x27;:&#x27;application/json&#x27;}}).finally(()=&gt;clearTimeout(timer));
+     if(!res.ok)throw Error(&#x27;Servicio HTTP &#x27;+res.status);
+     const arr=await res.json();if(!arr.length)throw Error(&#x27;Distrito no localizado en búsqueda&#x27;);
+     const match=arr.find(x=&gt;x.type===&#x27;administrative&#x27;)||arr[0];
+     const lat=Number(match.lat),lon=Number(match.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))throw Error(&#x27;Coordenadas no disponibles&#x27;);
+     const delta=.04;const bbox=[lon-delta,lat-delta,lon+delta,lat+delta].map(x=&gt;x.toFixed(6)).join(&#x27;,&#x27;);
+     frame.src=&#x27;https://www.openstreetmap.org/export/embed.html?bbox=&#x27;+encodeURIComponent(bbox)+&#x27;&amp;layer=mapnik&amp;marker=&#x27;+encodeURIComponent(lat+&#x27;,&#x27;+lon);
+     $(&#x27;urbanOpenFull&#x27;).href=&#x27;https://www.openstreetmap.org/?mlat=&#x27;+lat+&#x27;&amp;mlon=&#x27;+lon+&#x27;#map=13/&#x27;+lat+&#x27;/&#x27;+lon;
+   }catch(err){$(&#x27;urbanStatus&#x27;).textContent=&#x27;No fue posible cargar calles automáticamente. Usa «Abrir en OpenStreetMap» para buscar el distrito.&#x27;;return;}
+ }
+ frame.classList.add(&#x27;urbanActive&#x27;);holder.classList.add(&#x27;urbanHidden&#x27;);urbanStreetMode=true;btn.textContent=&#x27;Ver contorno&#x27;;$(&#x27;urbanStatus&#x27;).textContent=&#x27;Mapa urbano solicitado · Si el servidor bloquea el visor, utiliza «Abrir en OpenStreetMap».&#x27;;
+}
+async function importarGeoMain(file){
+ try{
+  $(&#x27;status&#x27;).textContent=&#x27;Procesando &#x27;+file.name+&#x27;…&#x27;;
+  const parsed=JSON.parse(await file.text());const features=Array.isArray(parsed.features)?parsed.features:Array.isArray(parsed)?parsed:[];
+  if(!features.length)throw Error(&#x27;El archivo no contiene polígonos GeoJSON&#x27;);
+  MAP_FEATURES=features;const ok=DISTRICTS.filter(d=&gt;mapsFor(d.district).length).length;
+  $(&#x27;status&#x27;).textContent=&#x27;Contornos identificados: &#x27;+ok+&#x27;/44&#x27;;renderMap();
+  if(urbanCurrentName)renderUrbanDistrict(urbanCurrentName);
+ }catch(e){$(&#x27;status&#x27;).textContent=&#x27;Error GeoJSON: &#x27;+e.message;}
+}
+
+async function loadMap(){
+ const urls=[
+ &#x27;https://raw.githubusercontent.com/Rodasluis/Peru-maps/main/salida/distrito_simplificado.geojson&#x27;,
+ &#x27;https://cdn.jsdelivr.net/gh/Rodasluis/Peru-maps@main/salida/distrito_simplificado.geojson&#x27;,
+ &#x27;https://raw.githubusercontent.com/axelrogg/peru-maps-geojson/main/geojson/districts.geojson&#x27;
+ ];
+ let best=[],bestN=0,errors=[];
+ for(const url of urls){
+  try{
+   const controller=new AbortController();const timeout=setTimeout(()=&gt;controller.abort(),35000);
+   let response;
+   try{response=await fetch(url,{signal:controller.signal,cache:&#x27;default&#x27;})}finally{clearTimeout(timeout)}
+   if(!response.ok)throw new Error(&#x27;HTTP &#x27;+response.status);
+   const data=await response.json();const features=Array.isArray(data.features)?data.features:(Array.isArray(data)?data:[]);
+   if(!features.length)throw new Error(&#x27;Respuesta sin polígonos&#x27;);
+   window.MAP_FEATURES=features;
+   const found=ordered.filter(d=&gt;mapsFor(d).length).length;
+   if(found&gt;bestN){best=features;bestN=found}
+   if(found===ordered.length)break;
+  }catch(error){errors.push(error.message);console.warn(&#x27;Error al cargar cartografía&#x27;,url,error)}
+ }
+ window.MAP_FEATURES=best;show();
+ const missing=ordered.filter(d=&gt;!mapsFor(d).length);
+ $(&#x27;status&#x27;).textContent=&#x27;Contornos identificados: &#x27;+(44-missing.length)+&#x27;/44&#x27;+(missing.length?&#x27; · Faltantes: &#x27;+missing.join(&#x27;, &#x27;):&#x27; · Todos identificados&#x27;);
+ $(&#x27;status&#x27;).style.color=missing.length?&#x27;#a73a25&#x27;:&#x27;#167650&#x27;;
+ $(&#x27;print&#x27;).disabled=missing.length&gt;0; $(&#x27;geoInfo&#x27;).textContent=missing.length?&#x27;No identificados: &#x27;+missing.join(&#x27;, &#x27;)+&#x27;. Importa el GeoJSON local para completar.&#x27;:&#x27;Todos los contornos cargados; impresión habilitada.&#x27;; if(!best.length){$(&#x27;status&#x27;).textContent=&#x27;No se pudo descargar la cartografía. Compruebe acceso a raw.githubusercontent.com o use un servidor local. &#x27;+errors.slice(0,2).join(&#x27; | &#x27;)}
+}
+
+async function cargarGeoLocal(file){
+ $(&#x27;status&#x27;).textContent=&#x27;Leyendo &#x27;+file.name+&#x27;…&#x27;;
+ try{
+  const src=JSON.parse(await file.text());
+  const features=Array.isArray(src.features)?src.features:Array.isArray(src)?src:[];
+  if(!features.length)throw Error(&#x27;El archivo no contiene GeoJSON FeatureCollection&#x27;);
+  window.MAP_FEATURES=features;
+  show();const missing=ordered.filter(d=&gt;!mapsFor(d).some(f=&gt;f.geometry&amp;&amp;(f.geometry.type===&#x27;Polygon&#x27;||f.geometry.type===&#x27;MultiPolygon&#x27;)));
+  const good=ordered.length-missing.length;
+  $(&#x27;status&#x27;).textContent=&#x27;Cartografía importada: &#x27;+good+&#x27;/44 contornos&#x27;;
+  $(&#x27;status&#x27;).style.color=missing.length?&#x27;#a73a25&#x27;:&#x27;#167650&#x27;;
+  $(&#x27;geoInfo&#x27;).textContent=missing.length?&#x27;SIN CONTORNO (&#x27;+missing.length+&#x27;): &#x27;+missing.join(&#x27; · &#x27;):&#x27;VALIDACIÓN COMPLETA: se identificaron los 44 polígonos. Puedes imprimir el atlas.&#x27;;
+  $(&#x27;print&#x27;).disabled=missing.length&gt;0;
+ }catch(e){$(&#x27;geoInfo&#x27;).textContent=&#x27;ERROR DE ARCHIVO: &#x27;+e.message;$(&#x27;status&#x27;).textContent=&#x27;Importación fallida&#x27;;$(&#x27;print&#x27;).disabled=true}
+}
+$(&#x27;geoImport&#x27;).addEventListener(&#x27;change&#x27;,e=&gt;{if(e.target.files[0])cargarGeoLocal(e.target.files[0])});
+$(&#x27;print&#x27;).disabled=true;
+$(&#x27;search&#x27;).addEventListener(&#x27;input&#x27;,show);$(&#x27;sel&#x27;).addEventListener(&#x27;change&#x27;,show);$(&#x27;ipress&#x27;).addEventListener(&#x27;change&#x27;,show);$(&#x27;clear&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{$(&#x27;search&#x27;).value=&#x27;&#x27;;$(&#x27;sel&#x27;).value=&#x27;&#x27;;$(&#x27;ipress&#x27;).value=&#x27;&#x27;;show()});$(&#x27;print&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;window.print());show();loadMap();
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;"></iframe></section><section id="urbanView" aria-label="Visor detallado del distrito"><div class="urbanToolbar"><label class="urbanSelectLabel">Distrito detallado<select id="urbanDistrictSelect"><option value="">Seleccionar distrito para detalle urbano</option></select></label><details id="urbanMultiBox" class="urban-multi"><summary>☑ Seleccionar varios distritos <span id="urbanMultiCount">(0)</span></summary><div class="urban-multi-panel"><div class="urban-multi-actions"><button type="button" id="urbanMultiApply">Mostrar selección en calles</button><button type="button" id="urbanMultiClear" class="alt">Limpiar</button></div><div id="urbanMultiChecks" class="urban-multi-checks"></div></div></details><button type="button" id="urbanUseCurrent">Mostrar distrito</button><button type="button" id="urbanStreetToggle" class="alt">Ver calles (OpenStreetMap)</button><button type="button" id="openStreetExternal" style="background:#166b46">↗ Ver calles y manzanas en mapa completo</button> <a id="urbanOpenFull" class="alt" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">↗ Abrir en OpenStreetMap</a><span id="urbanStatus" class="status">Selecciona un distrito para ver calles y detalle urbano.</span></div><div class="urbanLayout"><section class="panel urbanMapPanel"><iframe id="urbanFrame" title="Mapa urbano detallado del distrito" loading="lazy"></iframe><div id="urbanPlaceholder" class="urbanPlaceholder">Selecciona un distrito para abrir su visor detallado con calles y límites.</div></section><aside class="panel urbanSide"><h2 id="urbanTitle">Visor detallado del distrito</h2><p id="urbanMeta" class="small">Aquí verás el distrito seleccionado con una cartografía vial detallada.</p><div id="urbanSideBody" class="iprows"><div class="empty">Selecciona un distrito desde el mapa general, la lista o el selector de esta pestaña.</div></div><p class="urbanNote">Las calles y manzanas se consultan en OpenStreetMap. Los colores y códigos de zonificación (RDM, I2, ZRP, etc.) del ejemplo requieren cartografía municipal oficial y no pueden inferirse de los asegurados.</p></aside></div></section></main>
+<script>
+const DISTRICTS=[{"district": "ANTIOQUIA", "total": 167, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 156}, {"ipress": "H.II VITARTE", "asegurados": 11}]}, {"district": "ATE", "total": 280510, "breakdown": [{"ipress": "H.II VITARTE", "asegurados": 206494}, {"ipress": "CAP III HUAYCAN", "asegurados": 29768}, {"ipress": "H.I JORGE VOTO BERNALES CORPANCHO", "asegurados": 28634}, {"ipress": "POL. SAN LUIS", "asegurados": 12055}, {"ipress": "H.III HOSPITAL DE EMERGENCIAS GRAU", "asegurados": 3559}]}, {"district": "CALLAHUANCA", "total": 193, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 185}, {"ipress": "H.II VITARTE", "asegurados": 8}]}, {"district": "CARAMPOMA", "total": 123, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 118}, {"ipress": "H.II VITARTE", "asegurados": 5}]}, {"district": "CHACLACAYO", "total": 22410, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 20616}, {"ipress": "H.II VITARTE", "asegurados": 1794}]}, {"district": "CHICLA", "total": 1056, "breakdown": [{"ipress": "C.M. CASAPALCA", "asegurados": 1028}, {"ipress": "H.II VITARTE", "asegurados": 28}]}, {"district": "EL AGUSTINO", "total": 82223, "breakdown": [{"ipress": "CAP III EL AGUSTINO", "asegurados": 77170}, {"ipress": "H.I JORGE VOTO BERNALES CORPANCHO", "asegurados": 5053}]}, {"district": "HUACHUPAMPA", "total": 121, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 114}, {"ipress": "H.II VITARTE", "asegurados": 7}]}, {"district": "HUANZA", "total": 182, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 180}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "HUAROCHIRI", "total": 269, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 258}, {"ipress": "H.II VITARTE", "asegurados": 11}]}, {"district": "INDEPENDENCIA", "total": 97003, "breakdown": [{"ipress": "CAP III INDEPENDENCIA", "asegurados": 90781}, {"ipress": "H.II RAMON CASTILLA", "asegurados": 6222}]}, {"district": "LA VICTORIA", "total": 136412, "breakdown": [{"ipress": "POL. SAN LUIS", "asegurados": 85969}, {"ipress": "CAP III ALFREDO PIAZZA ROBERTS", "asegurados": 40795}, {"ipress": "H.III HOSPITAL DE EMERGENCIAS GRAU", "asegurados": 9648}]}, {"district": "LAHUAYTAMBO", "total": 30, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 29}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "LANGA", "total": 98, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 96}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "LARAOS", "total": 49, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 47}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "LIMA", "total": 191164, "breakdown": [{"ipress": "H.II RAMON CASTILLA", "asegurados": 191042}, {"ipress": "P.M. CONSTRUCCION CIVIL", "asegurados": 122}]}, {"district": "LURIGANCHO", "total": 77656, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 73126}, {"ipress": "H.II VITARTE", "asegurados": 4530}]}, {"district": "MARIATANA", "total": 154, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 152}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "MATUCANA", "total": 1858, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 1786}, {"ipress": "H.II VITARTE", "asegurados": 72}]}, {"district": "RICARDO PALMA", "total": 2473, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 2374}, {"ipress": "H.II VITARTE", "asegurados": 99}]}, {"district": "RIMAC", "total": 103491, "breakdown": [{"ipress": "POL. FRANCISCO PIZARRO", "asegurados": 95361}, {"ipress": "H.III HOSPITAL DE EMERGENCIAS GRAU", "asegurados": 8130}]}, {"district": "SAN ANDRES DE TUPICOCHA", "total": 69, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 65}, {"ipress": "H.II VITARTE", "asegurados": 4}]}, {"district": "SAN ANTONIO", "total": 8034, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 7765}, {"ipress": "H.II VITARTE", "asegurados": 269}]}, {"district": "SAN BARTOLOME", "total": 335, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 321}, {"ipress": "H.II VITARTE", "asegurados": 14}]}, {"district": "SAN BORJA", "total": 86641, "breakdown": [{"ipress": "CAP III SAN BORJA", "asegurados": 68226}, {"ipress": "H.III HOSPITAL DE EMERGENCIAS GRAU", "asegurados": 18415}]}, {"district": "SAN DAMIAN", "total": 151, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 149}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "SAN JOSE DE LOS CHORRILLOS", "total": 40, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 39}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "SAN JUAN DE IRIS", "total": 88, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 87}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "SAN JUAN DE LURIGANCHO", "total": 429319, "breakdown": [{"ipress": "H.I AURELIO DIAZ-UFANO Y PERAL", "asegurados": 429319}]}, {"district": "SAN JUAN DE TANTARANCHE", "total": 29, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 28}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "SAN LORENZO DE QUINTI", "total": 95, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 93}, {"ipress": "H.II VITARTE", "asegurados": 2}]}, {"district": "SAN LUIS", "total": 37511, "breakdown": [{"ipress": "POL. SAN LUIS", "asegurados": 33374}, {"ipress": "H.III HOSPITAL DE EMERGENCIAS GRAU", "asegurados": 4137}]}, {"district": "SAN MATEO", "total": 1986, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 1917}, {"ipress": "H.II VITARTE", "asegurados": 69}]}, {"district": "SAN MATEO DE OTAO", "total": 275, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 264}, {"ipress": "H.II VITARTE", "asegurados": 11}]}, {"district": "SAN PEDRO DE CASTA", "total": 146, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 138}, {"ipress": "H.II VITARTE", "asegurados": 8}]}, {"district": "SAN PEDRO DE HUANCAYRE", "total": 40, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 40}]}, {"district": "SANGALLAYA", "total": 52, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 52}]}, {"district": "SANTA ANITA", "total": 118937, "breakdown": [{"ipress": "H.I JORGE VOTO BERNALES CORPANCHO", "asegurados": 118937}]}, {"district": "SANTA CRUZ DE COCACHACRA", "total": 843, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 782}, {"ipress": "H.II VITARTE", "asegurados": 61}]}, {"district": "SANTA EULALIA", "total": 4633, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 4452}, {"ipress": "H.II VITARTE", "asegurados": 181}]}, {"district": "SANTIAGO DE ANCHUCAYA", "total": 62, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 61}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "SANTIAGO DE TUNA", "total": 57, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 56}, {"ipress": "H.II VITARTE", "asegurados": 1}]}, {"district": "SANTO DOMINGO DE LOS OLLEROS", "total": 785, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 744}, {"ipress": "H.II VITARTE", "asegurados": 41}]}, {"district": "SURCO", "total": 509, "breakdown": [{"ipress": "POL. CHOSICA", "asegurados": 489}, {"ipress": "H.II VITARTE", "asegurados": 20}]}];
+const COLORS=["#0b76ac", "#e49341", "#239c88", "#895cb7", "#df6688", "#6f8b33", "#1c879c", "#af6127"];
+const DIST_MAP = new Map(DISTRICTS.map(x=>[x.district,x]));
+const ORDERED = DISTRICTS.map(x=>x.district).sort((a,b)=>a.localeCompare(b,'es'));
+const HUAROCHIRI = new Set(['ANTIOQUIA','CALLAHUANCA','CARAMPOMA','CHICLA','HUACHUPAMPA','HUANZA','HUAROCHIRI','LAHUAYTAMBO','LANGA','LARAOS','MARIATANA','MATUCANA','RICARDO PALMA','SAN ANDRES DE TUPICOCHA','SAN ANTONIO','SAN BARTOLOME','SAN DAMIAN','SAN JOSE DE LOS CHORRILLOS','SAN JUAN DE IRIS','SAN JUAN DE TANTARANCHE','SAN LORENZO DE QUINTI','SAN MATEO','SAN MATEO DE OTAO','SAN PEDRO DE CASTA','SAN PEDRO DE HUANCAYRE','SANGALLAYA','SANTA CRUZ DE COCACHACRA','SANTA EULALIA','SANTIAGO DE ANCHUCAYA','SANTIAGO DE TUNA','SANTO DOMINGO DE LOS OLLEROS','SURCO']);
+let selectedDistrict='';
+const selectedDistricts=new Set();
+let multiMode=false;
+let MAP_FEATURES=[];
+let CURRENT_FEATURES=[];
+const $=id=>document.getElementById(id);
+const nfmt=n=>new Intl.NumberFormat('es-PE').format(n);
+const pct=(a,b)=>((a/b)*100).toFixed(2)+'%';
+const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim().replace(/\s+/g,' ');
+function geoname(p){return p.nombre||p.distrito||p.DISTRITO||p.NOMBDIST||p.NOMBDISTRI||p.NOM_DIS||p.NOMB_DIST||p.name||p.NOMBRE||p.NOMDISTRITO||p.nom_dist||''}
+function province(p){return norm(p.nombre_provincia||p.provincia_nombre||p.provincia||p.PROVINCIA||p.NOMBPROV||p.NOM_PROV||'')}
+function pickColor(total, breaks){if(total<=breaks[0]) return 'var(--c1)'; if(total<=breaks[1]) return 'var(--c2)'; if(total<=breaks[2]) return 'var(--c3)'; if(total<=breaks[3]) return 'var(--c4)'; return 'var(--c5)';}
+function mapsFor(d){
+ const expected=HUAROCHIRI.has(d)?'1507':'1501';
+ return MAP_FEATURES.filter(f=>{
+   const p=f.properties||{};
+   const id=String(p.ubigeo||p.UBIGEO||p.CODIGO||p.codigo||p.CODDIST||p.codigo_ubigeo||p.codigo_distrito||p.code||'').padStart(6,'0');
+   const a=norm(geoname(p));
+   const aliases={'LIMA':['LIMA','CERCADO DE LIMA'],'SAN JOSE DE LOS CHORRILLOS':['SAN JOSE DE LOS CHORRILLOS','CUENCA'],'LARAOS':['LARAOS','SAN PEDRO DE LARAOS'],'SAN PEDRO DE CASTA':['SAN PEDRO DE CASTA','CASTA'],'LURIGANCHO':['LURIGANCHO','LURIGANCHO CHOSICA']};
+   const knownId={'SAN JOSE DE LOS CHORRILLOS':'150706','LARAOS':'150712'};
+   const matches=(aliases[d]||[norm(d)]).map(norm);
+   if(knownId[d] && id===knownId[d]) return true;
+   if(id.length===6 && id.startsWith(expected) && matches.includes(a)) return true;
+   const prov = province(p);
+   if(matches.includes(a) && ((expected==='1507' && prov==='HUAROCHIRI') || (expected==='1501' && prov==='LIMA'))) return true;
+   return false;
+ })
+}
+function computeBreaks(){
+ const vals=DISTRICTS.map(d=>d.total).sort((a,b)=>a-b);
+ const q=x=>vals[Math.min(vals.length-1, Math.max(0, Math.floor((vals.length-1)*x)))];
+ return [q(.2),q(.4),q(.6),q(.8)];
+}
+const BREAKS=computeBreaks();
+$('legendRange').textContent='Menor población → mayor población';
+function multiTotals(){const names=[...selectedDistricts];const byIP=new Map();let total=0;for(const name of names){const d=DIST_MAP.get(name);if(!d)continue;total+=d.total;for(const b of d.breakdown)byIP.set(b.ipress,(byIP.get(b.ipress)||0)+b.asegurados)}return {names,total,byIP};}
+function refreshMultiChoices(){const box=$('multiChoices');box.replaceChildren();for(const d of DISTRICTS){const label=document.createElement('label'),check=document.createElement('input'),txt=document.createElement('span');check.type='checkbox';check.checked=selectedDistricts.has(d.district);check.addEventListener('change',()=>{if(check.checked)selectedDistricts.add(d.district);else selectedDistricts.delete(d.district);multiMode=selectedDistricts.size>0;selectedDistrict='';$('districtSelect').value='';$('districtQuick').value='';refreshMultiChoices();renderMap()});txt.textContent=d.district+' · '+nfmt(d.total);label.append(check,txt);box.append(label)}$('multiCount').textContent='('+selectedDistricts.size+')';}
+function clearMulti(){selectedDistricts.clear();multiMode=false;refreshMultiChoices()}
+function updateMultiSide(){stayOnGeneralMap();const {names,total,byIP}=multiTotals();$('kSel').textContent=names.length+' distritos';$('kDistricts').textContent=names.length;$('kTotal').textContent=nfmt(total);$('kIpress').textContent=byIP.size;$('detailPanel').hidden=false;$('sideTitle').textContent='Selección de '+names.length+' distritos';$('sideMeta').textContent=names.join(' · ')+' | Total: '+nfmt(total)+' asegurados';const sorted=[...byIP].sort((a,b)=>b[1]-a[1]);$('sideBody').replaceChildren();sorted.forEach(([ip,num],i)=>{const item=document.createElement('div');item.className='ipitem';const title=document.createElement('div');title.className='iptitle';const name=document.createElement('strong');name.textContent=ip;const value=document.createElement('span');value.textContent=nfmt(num)+' · '+pct(num,total);title.append(name,value);const track=document.createElement('div');track.className='track';const fill=document.createElement('div');fill.className='fill';fill.style.width=(num/total*100)+'%';fill.style.background=COLORS[i%COLORS.length];track.append(fill);item.append(title,track);$('sideBody').append(item)});}
+function stayOnGeneralMap(){
+ const general=$('generalView'),urban=$('urbanView'),individual=$('districtView');
+ general.style.display='block'; urban.style.display='none'; individual.style.display='none';
+ $('tabGeneral').classList.add('active');$('tabGeneral').setAttribute('aria-pressed','true');
+ for(const id of ['tabUrban','tabDistrict']){$(id).classList.remove('active');$(id).setAttribute('aria-pressed','false')}
+}
+function chooseDistrict(name){
+ stayOnGeneralMap();
+ if(multiMode){
+  if(selectedDistricts.has(name))selectedDistricts.delete(name);else selectedDistricts.add(name);
+  if(!selectedDistricts.size)multiMode=false;
+  refreshMultiChoices();selectedDistrict='';$('districtSelect').value='';
+  renderMap();return;
+ }
+ selectedDistrict=name;$('districtSelect').value=name;$('districtQuick').value=name;
+ renderMap();updateSide(name);
+}
+function updateSide(dname){
+ $('kSel').textContent=dname||'Todos';
+ if(!dname){
+   $('detailPanel').hidden=true;
+   $('sideTitle').textContent='Todos los distritos';
+   $('sideMeta').textContent='Selecciona un distrito del mapa o de la lista.';
+   $('sideBody').innerHTML='<div class="empty">Aquí verás el detalle de la distribución por establecimiento EsSalud.</div>';
+   return;
+ }
+ const d=DIST_MAP.get(dname);
+ $('detailPanel').hidden=false;
+ $('sideTitle').textContent=d.district;
+ $('sideMeta').textContent=nfmt(d.total)+' asegurados · '+d.breakdown.length+' establecimiento'+(d.breakdown.length===1?'':'s')+' EsSalud asignado'+(d.breakdown.length===1?'':'s');
+ const html=d.breakdown.map((r,i)=>`<div class="ipitem"><div class="iptitle"><strong>${r.ipress}</strong><span>${nfmt(r.asegurados)} · ${pct(r.asegurados,d.total)}</span></div><div class="track"><div class="fill" style="width:${(r.asegurados/d.total*100)}%;background:${COLORS[i%COLORS.length]}"></div></div></div>`).join('');
+ $('sideBody').innerHTML=html;
+ $('detailPanel').hidden=!dname;
+}
+function buildDistrictList(list){
+ const select=$('districtQuick'),current=select.value;
+ select.replaceChildren(new Option('▼ Seleccionar distrito ('+list.length+')',''));
+ for(const d of list)select.add(new Option(d.district+' · '+nfmt(d.total)+' asegurados',d.district));
+ select.value=list.some(d=>d.district===current)?current:'';
+}
+function pathFromRing(ring, transform){return ring.map((pt,i)=>{const [x,y]=transform(pt); return (i?'L':'M')+x.toFixed(2)+','+y.toFixed(2);}).join(' ')+' Z';}
+function polygonRingsForFeature(f){
+ const g=f.geometry; if(!g) return [];
+ const polys = g.type==='Polygon' ? [g.coordinates] : g.type==='MultiPolygon' ? g.coordinates : [];
+ let rings=[]; for(const poly of polys) for(const ring of poly.slice(0,1)) if(ring.length>2) rings.push(ring);
+ return rings;
+}
+function centroid(rings){let xs=[],ys=[]; rings.forEach(r=>r.forEach(p=>{xs.push(p[0]);ys.push(p[1]);})); return [xs.reduce((a,b)=>a+b,0)/xs.length, ys.reduce((a,b)=>a+b,0)/ys.length];}
+function areaRing(r){let a=0;for(let i=0,j=r.length-1;i<r.length;j=i++)a+=r[j][0]*r[i][1]-r[i][0]*r[j][1];return a/2}
+function polygonCenter(r){let a=0,cx=0,cy=0;for(let i=0,j=r.length-1;i<r.length;j=i++){const cross=r[j][0]*r[i][1]-r[i][0]*r[j][1];a+=cross;cx+=(r[j][0]+r[i][0])*cross;cy+=(r[j][1]+r[i][1])*cross}if(Math.abs(a)<1e-12)return centroid([r]);return [cx/(3*a),cy/(3*a)]}
+function renderMap(){
+ const q=norm($('search').value), selected=multiMode?'':($('districtSelect').value || selectedDistrict);
+ let list=DISTRICTS.filter(d=>multiMode?(selectedDistricts.has(d.district)) : ((!q || norm(d.district).includes(q)) && (!selected || d.district===selected)));
+ if(selected && !list.length && DIST_MAP.get(selected)) list=[DIST_MAP.get(selected)];
+ if(!list.length){ $('mapHolder').innerHTML='<div class="empty">No hay distritos que coincidan con el filtro.</div>'; buildDistrictList([]); return; }
+ buildDistrictList(list.sort((a,b)=>a.district.localeCompare(b.district,'es')));
+ const pairs=[];
+ list.forEach(d=>{ const feats=mapsFor(d.district); if(feats.length) pairs.push({district:d,features:feats}); });
+ CURRENT_FEATURES=pairs;
+ if(!pairs.length){
+   const holder=$('mapHolder');holder.replaceChildren();
+   const container=document.createElement('div');container.className='populationFallback';
+   const notice=document.createElement('div');notice.className='fallbackNotice';
+   notice.textContent='Los límites geográficos no están disponibles. Se muestra el resumen distrital de asegurados; para ver el mapa con contornos utiliza «Recuperar contornos GeoJSON». Esta vista de barras no es un mapa geográfico.';
+   container.append(notice);
+   const chart=document.createElement('div');chart.className='fallbackBars';
+   const max=Math.max(...list.map(d=>d.total),1);
+   [...list].sort((a,b)=>b.total-a.total).forEach(d=>{
+     const row=document.createElement('button');row.type='button';row.className='fallbackRow';
+     const name=document.createElement('span');name.className='fallbackName';name.textContent=d.district;
+     const track=document.createElement('span');track.className='fallbackTrack';
+     const fill=document.createElement('span');fill.className='fallbackFill';fill.style.width=Math.max(1,d.total/max*100)+'%';track.append(fill);
+     const value=document.createElement('span');value.className='fallbackValue';value.textContent=nfmt(d.total);
+     row.append(name,track,value);row.addEventListener('click',()=>chooseDistrict(d.district));chart.append(row);
+   });
+   container.append(chart);holder.append(container);
+   $('status').textContent='Contornos no disponibles · Resumen distrital visible';
+   if(multiMode&&selectedDistricts.size)updateMultiSide();else if(selected)updateSide(selected);else updateSide('');
+   return;
+ }
+ let ringsAll=[]; pairs.forEach(p=>p.features.forEach(f=>ringsAll.push(...polygonRingsForFeature(f))));
+ let xs=ringsAll.flatMap(r=>r.map(p=>p[0])), ys=ringsAll.flatMap(r=>r.map(p=>p[1]));
+ let xmin=Math.min(...xs), xmax=Math.max(...xs), ymin=Math.min(...ys), ymax=Math.max(...ys);
+ const cx=(xmin+xmax)/2, cy=(ymin+ymax)/2, scale=Math.cos(cy*Math.PI/180), w=(xmax-xmin)*scale, h=(ymax-ymin);
+ const W=1650,H=1450, margin=28, factor=Math.min((W-2*margin)/Math.max(w,1e-6),(H-2*margin)/Math.max(h,1e-6));
+ const transform = pt=>[W/2+(((pt[0]-cx)*scale)*factor), H/2-(((pt[1]-cy))*factor)];
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('role','img'); svg.setAttribute('aria-label','Mapa general de distritos');
+ // title
+ const bg=document.createElementNS('http://www.w3.org/2000/svg','rect'); bg.setAttribute('x',0); bg.setAttribute('y',0); bg.setAttribute('width',W); bg.setAttribute('height',H); bg.setAttribute('fill','#eef5f8'); svg.append(bg);
+ // polygons
+ const tooltip=$('tooltip');
+ pairs.forEach((p,idx)=>{
+   const group=document.createElementNS('http://www.w3.org/2000/svg','g'); group.setAttribute('data-district',p.district.district); group.style.cursor='pointer';
+   const districtColor=pickColor(p.district.total,BREAKS);
+   p.features.forEach(f=>{ polygonRingsForFeature(f).forEach(ring=>{ const path=document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('d',pathFromRing(ring, transform)); path.setAttribute('fill',districtColor); path.setAttribute('stroke','#075578'); path.setAttribute('stroke-width','1.1'); path.setAttribute('vector-effect','non-scaling-stroke'); path.setAttribute('opacity','0.95'); group.append(path); }); });
+   let allRings=[]; p.features.forEach(f=>allRings.push(...polygonRingsForFeature(f)));
+   const principal=allRings.reduce((a,b)=>!a||Math.abs(areaRing(b))>Math.abs(areaRing(a))?b:a,null);
+   const coords=principal.map(transform), minx=Math.min(...coords.map(v=>v[0])), maxx=Math.max(...coords.map(v=>v[0])), miny=Math.min(...coords.map(v=>v[1])), maxy=Math.max(...coords.map(v=>v[1]));
+   const [mx,my]=transform(polygonCenter(principal));
+   const width=maxx-minx, height=maxy-miny;
+   const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',mx);text.setAttribute('y',my);text.setAttribute('text-anchor','middle');text.setAttribute('dominant-baseline','middle');
+   const words=p.district.district.split(' '), lines=[];let line='';const maxChars=width>100?Math.max(9,Math.floor(width/7)):Math.max(5,Math.floor(width/5));
+   for(const word of words){const candidate=line?line+' '+word:word;if(candidate.length>maxChars&&line){lines.push(line);line=word;}else line=candidate}if(line)lines.push(line);
+   const longest=Math.max(...lines.map(v=>v.length));
+   const large=width>=210&&height>=170;
+   const small=width<105||height<85;
+   const base=large?7.9:(small?9.1:8.6);
+   const fitWidth=width*0.94/(longest*.61);
+   const fitHeight=height*0.68/Math.max(1,lines.length);
+   const font=Math.max(small?5.8:5.6,Math.min(base,fitWidth,fitHeight));
+   text.setAttribute('font-size',font.toFixed(1));text.setAttribute('font-weight','700');text.setAttribute('fill','#083f5c');text.setAttribute('paint-order','stroke');text.setAttribute('stroke','#f3fbff');text.setAttribute('stroke-linejoin','round');text.setAttribute('stroke-width',font<8?'0.85':'1.15');
+   lines.forEach((name,i)=>{const span=document.createElementNS('http://www.w3.org/2000/svg','tspan');span.setAttribute('x',mx);span.setAttribute('dy',i===0?(-(lines.length-1)*.54)+'em':'1.08em');span.textContent=name;text.append(span)});
+   const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=p.district.district+' · '+nfmt(p.district.total)+' asegurados';group.append(title,text);
+   group.addEventListener('mouseenter', e=>{ tooltip.style.display='block'; tooltip.innerHTML='<b>'+p.district.district+'</b><br>'+nfmt(p.district.total)+' asegurados'; group.querySelectorAll('path').forEach(x=>x.setAttribute('stroke-width','2')); });
+   group.addEventListener('mousemove', e=>{ const rect=$('mapWrap').getBoundingClientRect(); tooltip.style.left=(e.clientX-rect.left)+'px'; tooltip.style.top=(e.clientY-rect.top)+'px'; });
+   group.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; group.querySelectorAll('path').forEach(x=>x.setAttribute('stroke-width','1.1')); });
+   group.addEventListener('click', ()=>chooseDistrict(p.district.district));
+   if((selected && p.district.district===selected) || (multiMode && selectedDistricts.has(p.district.district))) group.querySelectorAll('path').forEach(x=>{x.setAttribute('stroke-width','2.4'); x.setAttribute('stroke','#d14a20');});
+   svg.append(group);
+ });
+ $('mapHolder').innerHTML=''; $('mapHolder').append(svg);
+ // Recuadro ampliado exclusivamente para distritos metropolitanos de superficie pequeña.
+ if(!selected){
+   const zoomNames=['LIMA','RIMAC','INDEPENDENCIA','LA VICTORIA','SAN LUIS','SAN BORJA','SANTA ANITA','EL AGUSTINO'];
+   const zoomPairs=pairs.filter(p=>zoomNames.includes(p.district.district));
+   const zoomRings=zoomPairs.flatMap(p=>p.features.flatMap(polygonRingsForFeature));
+   if(zoomRings.length){
+     const inset=document.createElement('div');inset.className='metroInset';
+     const heading=document.createElement('h3');heading.textContent='Detalle de Lima Metropolitana';inset.append(heading);
+     const isvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+     const IW=420,IH=300,marginZ=20;
+     isvg.setAttribute('viewBox',`0 0 ${IW} ${IH}`);isvg.setAttribute('aria-label','Ampliación de distritos metropolitanos');
+     const zx=zoomRings.flatMap(r=>r.map(pt=>pt[0])),zy=zoomRings.flatMap(r=>r.map(pt=>pt[1]));
+     const zminx=Math.min(...zx),zmaxx=Math.max(...zx),zminy=Math.min(...zy),zmaxy=Math.max(...zy);
+     const zscale=Math.cos(((zminy+zmaxy)/2)*Math.PI/180);
+     const zwidth=(zmaxx-zminx)*zscale,zheight=zmaxy-zminy;
+     const zfactor=Math.min((IW-2*marginZ)/Math.max(zwidth,1e-8),(IH-2*marginZ)/Math.max(zheight,1e-8));
+     const ztrans=pt=>[IW/2+(pt[0]-(zminx+zmaxx)/2)*zscale*zfactor,IH/2-(pt[1]-(zminy+zmaxy)/2)*zfactor];
+     zoomPairs.forEach(p=>{
+       const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.style.cursor='pointer';
+       const rings=p.features.flatMap(polygonRingsForFeature);
+       rings.forEach(r=>{const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',pathFromRing(r,ztrans));path.setAttribute('fill',pickColor(p.district.total,BREAKS));path.setAttribute('stroke','#075578');path.setAttribute('stroke-width','1.1');g.append(path)});
+       const main=rings.reduce((a,b)=>!a||Math.abs(areaRing(b))>Math.abs(areaRing(a))?b:a,null);
+       if(main){const center=ztrans(polygonCenter(main));const label=document.createElementNS('http://www.w3.org/2000/svg','text');label.setAttribute('x',center[0]);label.setAttribute('y',center[1]);label.setAttribute('text-anchor','middle');label.setAttribute('font-size','9.3');label.setAttribute('font-weight','700');label.setAttribute('fill','#083f5c');label.setAttribute('stroke','#fff');label.setAttribute('stroke-width','2');label.setAttribute('paint-order','stroke');label.textContent=p.district.district;g.append(label)}
+       const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=p.district.district+' · '+nfmt(p.district.total)+' asegurados';g.append(title);
+       g.addEventListener('click',()=>chooseDistrict(p.district.district));
+       isvg.append(g);
+     });
+     inset.append(isvg);const hint=document.createElement('p');hint.className='hint';hint.textContent='Acercamiento cartográfico sin alterar el mapa principal · Selecciona un distrito';inset.append(hint);
+     $('mapHolder').append(inset);
+   }
+ }
+
+ $('status').textContent='Contornos cargados: '+pairs.length+'/'+list.length+' distritos visibles';
+ if(multiMode && selectedDistricts.size) updateMultiSide(); else { $('kSel').textContent=selected||'Todos';$('kDistricts').textContent=44;$('kTotal').textContent=nfmt(1688279);$('kIpress').textContent=15;if(selected && DIST_MAP.get(selected)) updateSide(selected); else updateSide('');}
+}
+async function loadMap(){
+ ORDERED.forEach(d=>{ const opt=new Option(d,d);$('districtSelect').add(opt);const opt2=new Option(d,d);$('urbanDistrictSelect').add(opt2); });
+ renderMap();
+ const urls=[
+ 'https://cdn.jsdelivr.net/gh/Rodasluis/Peru-maps@main/salida/distrito_simplificado.geojson',
+ 'https://raw.githubusercontent.com/Rodasluis/Peru-maps/main/salida/distrito_simplificado.geojson'
+ ];
+ const jobs=urls.map(async url=>{
+   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),9500);
+   try{const res=await fetch(url,{signal:controller.signal,cache:'default'});if(!res.ok)throw Error('HTTP '+res.status);const data=await res.json();return Array.isArray(data.features)?data.features:[];}
+   catch(e){console.warn('Cartografía no disponible:',url,e.message);return [];}
+   finally{clearTimeout(timer)}
+ });
+ const all=await Promise.all(jobs);
+ let best=[],bestCount=0;
+ for(const feats of all){if(!feats.length)continue;MAP_FEATURES=feats;const n=DISTRICTS.filter(d=>mapsFor(d.district).length).length;if(n>bestCount){bestCount=n;best=feats;}}
+ MAP_FEATURES=best;
+ renderMap();
+ if(!bestCount)$('status').textContent='Cartografía externa no disponible · Importa archivo GeoJSON';
+}
+$('search').addEventListener('input', ()=>{clearMulti();selectedDistrict=''; $('districtSelect').value=''; renderMap();});
+$('districtSelect').addEventListener('change', e=>{stayOnGeneralMap();clearMulti();selectedDistrict=e.target.value;$('districtQuick').value=e.target.value;renderMap();if(selectedDistrict){updateSide(selectedDistrict);}});
+$('districtQuick').addEventListener('change',e=>{stayOnGeneralMap();clearMulti();selectedDistrict=e.target.value;$('districtSelect').value=e.target.value;renderMap();renderUrbanDistrict(selectedDistrict);if(selectedDistrict)$('detailPanel').scrollIntoView({behavior:'smooth',block:'nearest'});});
+$('resetBtn').addEventListener('click', ()=>{clearMulti(); $('search').value=''; $('districtSelect').value=''; $('districtQuick').value=''; selectedDistrict=''; renderMap(); renderUrbanDistrict(''); });
+$('multiOpen').addEventListener('click',()=>{const open=$('multiPanel').hidden;$('multiPanel').hidden=!open;if(open)multiMode=true;$('multiOpen').setAttribute('aria-expanded',String(open))});$('multiAll').addEventListener('click',()=>{for(const d of DISTRICTS)selectedDistricts.add(d.district);multiMode=true;refreshMultiChoices();renderMap()});$('multiNone').addEventListener('click',()=>{clearMulti();renderMap()});refreshMultiChoices();
+$('printBtn').addEventListener('click', ()=>window.print());
+$('expandMap').addEventListener('click',()=>{document.body.classList.toggle('map-expanded');$('expandMap').textContent=document.body.classList.contains('map-expanded')?'Vista normal':'Ampliar mapa';});
+if($('urbanStreetToggle') && typeof toggleUrbanStreets==='function')$('urbanStreetToggle').addEventListener('click',toggleUrbanStreets);
+$('urbanDistrictSelect').addEventListener('change',e=>{selectedDistrict=e.target.value; $('districtSelect').value=selectedDistrict; $('districtQuick').value=selectedDistrict; if(selectedDistrict){updateSide(selectedDistrict);} renderUrbanDistrict(selectedDistrict);});
+$('urbanUseCurrent').addEventListener('click',()=>{if(selectedDistrict){$('urbanDistrictSelect').value=selectedDistrict; renderUrbanDistrict(selectedDistrict);}else{$('urbanStatus').textContent='Primero selecciona un distrito en el mapa general o en la lista.';}});
+loadMap();
+</script>
+<script>
+let urbanStreetVisible=true;
+function districtBounds(name){
+ const feats=mapsFor(name), pts=[];
+ for(const f of feats){const g=f.geometry;if(!g)continue;const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+   for(const poly of polys)for(const ring of poly)for(const pt of ring)if(Number.isFinite(pt[0])&&Number.isFinite(pt[1]))pts.push(pt);
+ }
+ if(!pts.length)return null;
+ const lons=pts.map(p=>p[0]),lats=pts.map(p=>p[1]);
+ const minLon=Math.min(...lons),maxLon=Math.max(...lons),minLat=Math.min(...lats),maxLat=Math.max(...lats);
+ const px=Math.max((maxLon-minLon)*0.10,0.003),py=Math.max((maxLat-minLat)*0.10,0.003);
+ return {minLon:minLon-px,minLat:minLat-py,maxLon:maxLon+px,maxLat:maxLat+py,centerLon:(minLon+maxLon)/2,centerLat:(minLat+maxLat)/2};
+}
+function renderUrbanDistrict(name){
+ const frame=document.getElementById('urbanFrame'),holder=document.getElementById('urbanPlaceholder');
+ const title=document.getElementById('urbanTitle'),meta=document.getElementById('urbanMeta');
+ const side=document.getElementById('urbanSideBody'),select=document.getElementById('urbanDistrictSelect');
+ const btn=document.getElementById('urbanStreetToggle'),open=document.getElementById('urbanOpenFull');
+ if(!frame||!holder)return;
+ name=name||select.value||document.getElementById('districtSelect').value||'';
+ if(!name){holder.textContent='Selecciona un distrito para ver sus calles.';holder.classList.remove('urbanHidden');frame.classList.remove('urbanActive');return;}
+ select.value=name;
+ const d=DIST_MAP.get(name),b=districtBounds(name);
+ if(!d)return;
+ title.textContent=name;
+ meta.textContent=nfmt(d.total)+' asegurados · '+d.breakdown.length+' establecimientos EsSalud';
+ side.replaceChildren();
+ for(let i=0;i<d.breakdown.length;i++){
+  const r=d.breakdown[i],item=document.createElement('div'),line=document.createElement('div'),bold=document.createElement('strong'),val=document.createElement('span'),track=document.createElement('div'),fill=document.createElement('div');
+  item.className='ipitem';line.className='iptitle';track.className='track';fill.className='fill';
+  bold.textContent=r.ipress;val.textContent=nfmt(r.asegurados)+' · '+pct(r.asegurados,d.total);line.append(bold,val);
+  fill.style.width=100*r.asegurados/d.total+'%';fill.style.background=COLORS[i%COLORS.length];track.append(fill);item.append(line,track);side.append(item);
+ }
+ if(b){
+  const bbox=[b.minLon,b.minLat,b.maxLon,b.maxLat].map(v=>v.toFixed(6)).join(',');
+  frame.src='https://www.openstreetmap.org/export/embed.html?bbox='+encodeURIComponent(bbox)+'&layer=mapnik';
+  open.href='https://www.openstreetmap.org/?mlat='+b.centerLat.toFixed(6)+'&mlon='+b.centerLon.toFixed(6)+'#map=14/'+b.centerLat.toFixed(6)+'/'+b.centerLon.toFixed(6);
+  holder.textContent='Si las calles no aparecen, utiliza «Abrir en OpenStreetMap». Para zonas rurales puede haber vías no registradas.';
+ }else{
+  frame.removeAttribute('src');
+  open.href='https://www.openstreetmap.org/search?query='+encodeURIComponent(name+', Lima, Perú');
+  holder.textContent='No se pudo recuperar el límite. Abre el distrito en OpenStreetMap.';
+ }
+ document.getElementById('urbanStatus').textContent=b?'Mapa de calles de '+name+' (requiere internet)':'No se recuperó el contorno de '+name;
+ urbanStreetVisible=!!b;
+ frame.classList.toggle('urbanActive',!!b);
+ holder.classList.toggle('urbanHidden',!!b);
+ btn.textContent=b?'Ver contorno / información':'Ver calles';
+}
+function toggleUrbanStreets(){
+ const frame=document.getElementById('urbanFrame'),holder=document.getElementById('urbanPlaceholder'),btn=document.getElementById('urbanStreetToggle');
+ urbanStreetVisible=!urbanStreetVisible;
+ frame.classList.toggle('urbanActive',urbanStreetVisible);
+ holder.classList.toggle('urbanHidden',urbanStreetVisible);
+ btn.textContent=urbanStreetVisible?'Ver contorno / información':'Ver calles (OpenStreetMap)';
+}
+</script>
+<script>
+(function(){
+ const byId=id=>document.getElementById(id);
+ const general=byId('generalView'),district=byId('districtView'),urban=byId('urbanView');
+ const tabGeneral=byId('tabGeneral'),tabDistrict=byId('tabDistrict'),tabUrban=byId('tabUrban');
+ function switchView(view){
+   const isDistrict=view==='district', isUrban=view==='urban';
+   general.style.display=(!isDistrict && !isUrban)?'block':'none';
+   district.style.display=isDistrict?'block':'none';
+   urban.style.display=isUrban?'block':'none';
+   tabGeneral.classList.toggle('active',!isDistrict && !isUrban);
+   tabDistrict.classList.toggle('active',isDistrict);
+   tabUrban.classList.toggle('active',isUrban);
+   tabGeneral.setAttribute('aria-pressed',String(!isDistrict && !isUrban));
+   tabDistrict.setAttribute('aria-pressed',String(isDistrict));
+   tabUrban.setAttribute('aria-pressed',String(isUrban));
+   document.title=isDistrict?'EsSalud · 44 mapas por distrito':(isUrban?'EsSalud · Visor detallado del distrito':'EsSalud · Mapa general de 44 distritos');
+   if(isUrban) {const d=document.getElementById('urbanDistrictSelect').value || document.getElementById('districtSelect').value || document.getElementById('districtQuick').value || 'ATE';renderUrbanDistrict(d);}
+   window.scrollTo({top:0,behavior:'instant'});
+ }
+ tabGeneral.addEventListener('click',()=>switchView('general'));
+ tabDistrict.addEventListener('click',()=>switchView('district'));
+ tabUrban.addEventListener('click',()=>switchView('urban'));
+ byId('quickDistrict').addEventListener('click',()=>switchView('district'));
+ byId('quickUrban').addEventListener('click',()=>switchView('urban'));
+})();
+</script>
+<style>
+/* V30 — capa vial con mosaicos cartográficos nativos */
+#urbanPlaceholder{position:relative;display:block!important;overflow:hidden!important;background:#e6eef4;height:clamp(530px,72vh,920px);min-height:530px;width:100%;touch-action:none;user-select:none}
+#urbanFrame{display:none!important}
+.road-tile{position:absolute;width:256px;height:256px;max-width:none;pointer-events:none;user-select:none}
+.road-toolbar{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:5px;z-index:20}
+.road-toolbar button{width:40px;height:40px;font-size:21px;padding:0;background:#fff;color:#075578;box-shadow:0 1px 6px #092f4633;border:1px solid #bad2de}
+.road-attrib{position:absolute;right:5px;bottom:4px;background:#ffffffdd;font-size:10px;padding:3px 5px;z-index:18;color:#344c5d}
+.road-label{position:absolute;left:12px;top:12px;background:#fff;color:#075578;border-radius:8px;padding:9px 11px;font-size:12px;z-index:18;box-shadow:0 2px 8px #194d6b22;max-width:64%}
+.road-status{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:18;background:#fff;border:1px solid #d4e0e8;padding:7px 9px;font-size:12px;border-radius:6px;pointer-events:none}
+
+/* V32: contorno geográfico sobre calles */
+.urban-boundary{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:9;overflow:hidden}
+.urban-boundary path{fill:#18a0bf;fill-opacity:.075;stroke:#d63326;stroke-width:3;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.urban-boundary path.context-district{fill:none;stroke:#7f95a6;stroke-opacity:.45;stroke-width:1.1;vector-effect:non-scaling-stroke}
+.urban-boundary path.selected-district{fill-opacity:.10;stroke-width:3.1;vector-effect:non-scaling-stroke}
+.urban-boundary text.selected-label{font-size:12px;font-weight:700;fill:#073f57;paint-order:stroke;stroke:#eef5f8;stroke-width:3;stroke-linejoin:round;letter-spacing:.2px}
+.road-tiles{position:absolute;inset:0;overflow:hidden;z-index:1}
+
+.boundary-switch{position:absolute;bottom:28px;left:12px;z-index:22;display:flex;align-items:center;gap:7px;background:#fff;padding:7px 10px;border:1px solid #cad8e2;border-radius:7px;color:#104b68;font-size:12px;font-weight:bold;box-shadow:0 2px 8px #193c5522}
+.boundary-switch input{width:16px;height:16px;margin:0;accent-color:#d63326}
+</style><script>
+/* V30: el visor vial ya no depende del iframe ni de un contorno cargado */
+(function(){
+ const tiles=new Map();let viewport=null, current=null, zoom=14,centerX=0,centerY=0,drag=null;
+ const urbanSelected=new Set();
+ const el=id=>document.getElementById(id),fmt=n=>new Intl.NumberFormat('es-PE').format(n);
+ const fallback={
+ 'ATE':[-12.026,-76.899], 'ANTIOQUIA':[-12.08,-76.511], 'HUANZA':[-11.657,-76.510],
+ 'LA VICTORIA':[-12.068,-77.014], 'LIMA':[-12.046,-77.042], 'SAN BORJA':[-12.104,-77.003],
+ 'SAN LUIS':[-12.076,-76.995], 'INDEPENDENCIA':[-11.990,-77.046], 'RIMAC':[-12.025,-77.029],
+ 'SANTA ANITA':[-12.045,-76.970], 'EL AGUSTINO':[-12.044,-77.000],
+ 'CHACLACAYO':[-11.976,-76.768], 'LURIGANCHO':[-11.939,-76.694],
+ 'SAN JUAN DE LURIGANCHO':[-11.974,-76.997], 'CHICLA':[-11.710,-76.268]
+ };
+ function project(lat,lon,z){let n=256*Math.pow(2,z);return [((lon+180)/360)*n,(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*n]}
+ function unproject(x,y,z){let n=256*Math.pow(2,z),lon=x/n*360-180,lat=Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;return [lat,lon]}
+ function tileRender(){
+  if(!viewport||!current)return;
+  const w=viewport.clientWidth,h=viewport.clientHeight;
+  if(!w||!h)return;
+  const host=viewport.querySelector('.road-tiles');const needed=new Set();const left=centerX-w/2,top=centerY-h/2;
+  const startX=Math.floor(left/256)-1,endX=Math.floor((left+w)/256)+1,startY=Math.floor(top/256)-1,endY=Math.floor((top+h)/256)+1,limit=2**zoom;
+  for(let tx=startX;tx<=endX;tx++)for(let ty=startY;ty<=endY;ty++){
+   if(ty<0||ty>=limit)continue;
+   const wrapped=((tx%limit)+limit)%limit,key=zoom+'/'+wrapped+'/'+ty;needed.add(key);
+   let img=tiles.get(key);
+   if(!img){img=document.createElement('img');img.className='road-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='no-referrer';img.src='https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/'+zoom+'/'+ty+'/'+wrapped;
+    img.addEventListener('error',()=>{img.removeAttribute('src');img.style.background='#edf4f8';img.style.border='1px solid #dce8ef';img.alt='Capa vial no disponible';if(!document.getElementById('v31MapWarning')){const warning=document.createElement('div');warning.id='v31MapWarning';warning.textContent='El proveedor del mapa vial no está respondiendo. Usa «Abrir mapa de calles» para verlo en el sitio de origen.';warning.style.cssText='position:absolute;left:12px;bottom:40px;z-index:70;max-width:430px;background:#fff4e5;color:#7f4b04;padding:12px;border:1px solid #eac98e;border-radius:9px;font:600 12px Arial';viewport.append(warning)}});
+    host.append(img);tiles.set(key,img)}
+   img.style.left=Math.round(tx*256-left)+'px';img.style.top=Math.round(ty*256-top)+'px';
+  }
+  for(const [key,img] of tiles)if(!needed.has(key)){img.remove();tiles.delete(key)}
+  drawBoundary();
+ }
+ function drawBoundary(){
+  const svg=viewport?.querySelector('.urban-boundary');if(!svg)return;
+  svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${viewport.clientWidth} ${viewport.clientHeight}`);
+  const checked=viewport.querySelector('#boundaryToggle');if(checked&&!checked.checked)return;
+  const selected=urbanSelected.size?[...urbanSelected]:current?[current]:[];
+  const selectedSet=new Set(selected);
+  const left=centerX-viewport.clientWidth/2,top=centerY-viewport.clientHeight/2;
+  const palette=['#df382b','#3164bc','#26a279','#954fc3','#f07832','#8b7c15','#c74a91'];
+  function appendFeature(name,feature,cls,color){
+    const g=feature.geometry;if(!g)return;
+    const polygons=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+    for(const polygon of polygons){
+      const commands=[];
+      for(const ring of polygon){
+        if(!ring||ring.length<3)continue;
+        let segment='';
+        for(let k=0;k<ring.length;k++){
+          const [x,y]=project(ring[k][1],ring[k][0],zoom);
+          segment+=(k===0?'M':'L')+(x-left).toFixed(2)+' '+(y-top).toFixed(2)+' ';
+        }
+        commands.push(segment+'Z');
+      }
+      if(commands.length){
+        const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d',commands.join(' '));
+        path.setAttribute('fill-rule','evenodd');
+        path.setAttribute('class',cls);
+        if(color){path.style.stroke=color;path.style.fill=color}
+        const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=name;path.append(title);svg.append(path);
+      }
+    }
+  }
+  // divisiones distritales de contexto
+  if(typeof DIST_MAP!=='undefined'){
+    for(const name of DIST_MAP.keys()){
+      if(selectedSet.has(name)) continue;
+      let feats=[];try{feats=mapsFor(name)||[]}catch(e){}
+      for(const feature of feats) appendFeature(name,feature,'context-district');
+    }
+  }
+  // distritos seleccionados destacados
+  selected.forEach((name,index)=>{
+    let feats=[];try{feats=mapsFor(name)||[]}catch(e){}
+    const color=palette[index%palette.length];
+    for(const feature of feats) appendFeature(name,feature,'selected-district',color);
+    try{
+      const b=typeof districtBounds==='function'?districtBounds(name):null;
+      if(b&&Number.isFinite(b.centerLat)&&Number.isFinite(b.centerLon)){
+        const [x,y]=project(b.centerLat,b.centerLon,zoom);
+        const label=document.createElementNS('http://www.w3.org/2000/svg','text');
+        label.setAttribute('x',(x-left).toFixed(2));
+        label.setAttribute('y',(y-top).toFixed(2));
+        label.setAttribute('text-anchor','middle');
+        label.setAttribute('class','selected-label');
+        label.textContent=name;
+        svg.append(label);
+      }
+    }catch(e){}
+  });
+  const note=viewport.querySelector('.road-boundary-note');
+  if(note){
+    note.textContent=selected.length?selected.length+' distrito(s) resaltado(s) · divisiones visibles':'Divisiones distritales';
+  }
+ }
+
+ function doZoom(delta){if(!viewport)return;const nz=Math.max(7,Math.min(19,zoom+delta));if(nz===zoom)return;const factor=2**(nz-zoom);centerX*=factor;centerY*=factor;zoom=nz;tiles.forEach(img=>img.remove());tiles.clear();tileRender()}
+ function init(){viewport=el('urbanPlaceholder');viewport.replaceChildren();
+  const host=document.createElement('div');host.className='road-tiles';viewport.append(host);
+  const boundary=document.createElementNS('http://www.w3.org/2000/svg','svg');boundary.classList.add('urban-boundary');boundary.setAttribute('aria-label','Perímetro del distrito seleccionado');viewport.append(boundary);
+  const boundaryControl=document.createElement('label');boundaryControl.className='boundary-switch';
+  const boundaryCheck=document.createElement('input');boundaryCheck.type='checkbox';boundaryCheck.id='boundaryToggle';boundaryCheck.checked=true;
+  const boundaryText=document.createElement('span');boundaryText.className='road-boundary-note';boundaryText.textContent='Límite distrital';
+  boundaryControl.append(boundaryCheck,boundaryText);boundaryCheck.addEventListener('change',drawBoundary);viewport.append(boundaryControl);
+  const label=document.createElement('div');label.className='road-label';viewport.append(label);
+  const buttons=document.createElement('div');buttons.className='road-toolbar';
+  for(const [symbol,delta] of [['+',1],['−',-1]]){let btn=document.createElement('button');btn.type='button';btn.textContent=symbol;btn.title=delta>0?'Acercar':'Alejar';btn.onclick=()=>doZoom(delta);buttons.append(btn)}viewport.append(buttons);
+  const attr=document.createElement('div');attr.className='road-attrib';attr.textContent='Mapa base: Esri World Street Map · © Esri y proveedores de datos';viewport.append(attr);
+  viewport.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;drag={x:e.clientX,y:e.clientY,cx:centerX,cy:centerY};viewport.setPointerCapture(e.pointerId);viewport.style.cursor='grabbing'});
+  viewport.addEventListener('pointermove',e=>{if(!drag)return;centerX=drag.cx-(e.clientX-drag.x);centerY=drag.cy-(e.clientY-drag.y);tileRender()});
+  viewport.addEventListener('pointerup',()=>{drag=null;viewport.style.cursor='grab'});
+  viewport.addEventListener('pointercancel',()=>{drag=null;viewport.style.cursor='grab'});
+  viewport.addEventListener('wheel',e=>{e.preventDefault();doZoom(e.deltaY<0?1:-1)},{passive:false});viewport.style.cursor='grab';
+  new ResizeObserver(()=>tileRender()).observe(viewport);
+ }
+ function selectedCenter(name){
+  try{const b=typeof districtBounds==='function'?districtBounds(name):null;if(b&&Number.isFinite(b.centerLat))return [b.centerLat,b.centerLon]}catch(e){}
+  return fallback[name]||null;
+ }
+ window.renderUrbanDistrict=function(name){
+  if(!viewport)init();
+  urbanSelected.clear();el('urbanMultiChecks').querySelectorAll('input').forEach(x=>x.checked=false);updateUrbanCount();
+  const select=el('urbanDistrictSelect');name=name||select.value||el('districtSelect').value||'ATE';
+  let d=typeof DIST_MAP!=='undefined'?DIST_MAP.get(name):null;
+  if(!d){el('urbanStatus').textContent='Distrito no encontrado';return}
+  current=name; select.value=name;const pt=selectedCenter(name);
+  const label=viewport.querySelector('.road-label');label.textContent=name+' · Calles + límite distrital + divisiones';
+  const meta=el('urbanMeta'),side=el('urbanSideBody');el('urbanTitle').textContent=name;
+  meta.textContent=fmt(d.total)+' asegurados · '+d.breakdown.length+' establecimientos EsSalud';
+  side.replaceChildren();for(let i=0;i<d.breakdown.length;i++){
+   const r=d.breakdown[i],box=document.createElement('div'),head=document.createElement('div'),strong=document.createElement('strong'),val=document.createElement('span'),track=document.createElement('div'),fill=document.createElement('div');
+   box.className='ipitem';head.className='iptitle';track.className='track';fill.className='fill';strong.textContent=r.ipress;
+   val.textContent=fmt(r.asegurados)+' · '+(100*r.asegurados/d.total).toFixed(2)+'%';
+   fill.style.width=100*r.asegurados/d.total+'%';fill.style.background=COLORS[i%COLORS.length];
+   head.append(strong,val);track.append(fill);box.append(head,track);side.append(box)
+  }
+  if(!pt){label.textContent=name+' · Sin coordenadas';el('urbanStatus').textContent='El distrito no tiene coordenadas cargadas. Puede abrirse en OpenStreetMap.';el('urbanOpenFull').href='https://www.openstreetmap.org/search?query='+encodeURIComponent(name+', Lima, Perú');return}
+  zoom= name==='HUANZA'||name==='ANTIOQUIA'?12:14;[centerX,centerY]=project(pt[0],pt[1],zoom);
+  tiles.forEach(img=>img.remove());tiles.clear();tileRender();
+  const url='https://www.openstreetmap.org/?mlat='+pt[0]+'&mlon='+pt[1]+'#map='+zoom+'/'+pt[0]+'/'+pt[1];
+  el('urbanOpenFull').href=url;el('urbanStatus').textContent='Vista vial Esri · usa +/− o arrastra el mapa';
+  const streetBtn=el('urbanStreetToggle');if(streetBtn)streetBtn.style.display='none';
+  el('urbanFrame').style.display='none';
+ };
+
+ function updateUrbanCount(){el('urbanMultiCount').textContent='('+urbanSelected.size+')'}
+ function renderUrbanMulti(){
+  if(!viewport)init();
+  const names=[...urbanSelected];if(!names.length)return;
+  let west=Infinity,east=-Infinity,south=Infinity,north=-Infinity;
+  const byIP=new Map();let total=0;
+  for(const name of names){
+   const d=DIST_MAP.get(name);if(!d)continue;total+=d.total;
+   for(const r of d.breakdown)byIP.set(r.ipress,(byIP.get(r.ipress)||0)+r.asegurados);
+   for(const f of mapsFor(name)){
+    const g=f.geometry;if(!g)continue;
+    const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+    for(const poly of polys)for(const ring of poly)for(const p of ring){west=Math.min(west,p[0]);east=Math.max(east,p[0]);south=Math.min(south,p[1]);north=Math.max(north,p[1]);}
+   }
+  }
+  if(!Number.isFinite(west)){el('urbanStatus').textContent='No hay polígonos cargados para estos distritos';return}
+  const w=Math.max(400,viewport.clientWidth),h=Math.max(440,viewport.clientHeight);
+  for(let z=17;z>=7;z--){const nw=project(south,east,z),sw=project(north,west,z);if(Math.abs(nw[0]-sw[0])<w*.82&&Math.abs(nw[1]-sw[1])<h*.82){zoom=z;break}}
+  [centerX,centerY]=project((north+south)/2,(west+east)/2,zoom);
+  current=names[0];tiles.forEach(img=>img.remove());tiles.clear();tileRender();
+  el('urbanTitle').textContent=names.length+' distritos seleccionados';
+  el('urbanMeta').textContent=fmt(total)+' asegurados · '+byIP.size+' establecimientos EsSalud · '+names.join(', ');
+  const side=el('urbanSideBody');side.replaceChildren();
+  [...byIP].sort((a,b)=>b[1]-a[1]).forEach(([ip,num],i)=>{
+   const box=document.createElement('div'),head=document.createElement('div'),strong=document.createElement('strong'),val=document.createElement('span'),track=document.createElement('div'),fill=document.createElement('div');
+   box.className='ipitem';head.className='iptitle';track.className='track';fill.className='fill';strong.textContent=ip;val.textContent=fmt(num)+' · '+(num/total*100).toFixed(2)+'%';fill.style.width=num/total*100+'%';fill.style.background=COLORS[i%COLORS.length];head.append(strong,val);track.append(fill);box.append(head,track);side.append(box);
+  });
+  viewport.querySelector('.road-label').textContent=names.length+' distritos · Calles + divisiones + límites';
+  el('urbanStatus').textContent=names.length+' distritos visibles con calles y divisiones; usa +/− para acercar';
+ }
+ function initMultiControls(){
+  const checks=el('urbanMultiChecks');checks.replaceChildren();
+  [...DIST_MAP.keys()].sort((a,b)=>a.localeCompare(b,'es')).forEach(name=>{
+   const label=document.createElement('label'),check=document.createElement('input'),span=document.createElement('span');check.type='checkbox';check.value=name;span.textContent=name;
+   check.addEventListener('change',()=>{if(check.checked)urbanSelected.add(name);else urbanSelected.delete(name);updateUrbanCount()});
+   label.append(check,span);checks.append(label);
+  });
+  el('urbanMultiApply').addEventListener('click',()=>{if(!urbanSelected.size){el('urbanStatus').textContent='Marca al menos dos distritos';return}renderUrbanMulti();el('urbanMultiBox').open=false});
+  el('urbanMultiClear').addEventListener('click',()=>{urbanSelected.clear();checks.querySelectorAll('input').forEach(x=>x.checked=false);updateUrbanCount();el('urbanMultiBox').open=false;window.renderUrbanDistrict(el('urbanDistrictSelect').value||'ATE')});
+ }
+ initMultiControls();
+ // Los handlers antiguos también llaman a renderUrbanDistrict; esa función ahora es el visor vial.
+})();
+</script>
+<style>
+#mapHolder.general-road-active{height:clamp(570px,73vh,930px)!important;min-height:570px!important;overflow:hidden;position:relative;background:#eaf1f6}
+#mapHolder .general-road-map{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+#mapHolder .general-road-tiles{position:absolute;inset:0;pointer-events:none}
+#mapHolder .general-road-tiles img{position:absolute;width:256px;height:256px;max-width:none;pointer-events:none}
+#mapHolder .general-road-mask{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+#mapHolder .general-road-borders{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+#mapHolder .general-road-panel{position:absolute;left:12px;top:12px;z-index:5;background:#fffffff2;border:1px solid #c7dbe7;border-radius:8px;padding:9px 12px;color:#095879;font-size:12px;font-weight:700;max-width:65%}
+#mapHolder .general-road-buttons{position:absolute;right:12px;top:12px;z-index:6;display:grid;gap:4px}
+#mapHolder .general-road-buttons button{background:white;color:#075578;min-width:38px;min-height:38px;font-size:20px;padding:4px}
+#mapHolder .general-road-attrib{position:absolute;bottom:4px;right:5px;background:#fffd;font-size:10px;padding:3px;color:#334b5d}
+</style>
+<script>
+(()=>{
+ const holder=document.getElementById('mapHolder');
+ const original=window.renderMap;
+ const SVG='http://www.w3.org/2000/svg';
+ let map=null,zoom=12,cx=0,cy=0,drag=null,tiles=new Map(),names=[];
+ const project=(lat,lon,z)=>{let n=256*2**z;return [(lon+180)/360*n,(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*n]};
+ const selectedNames=()=>multiMode?[...selectedDistricts]:(document.getElementById('districtSelect').value||selectedDistrict)?[document.getElementById('districtSelect').value||selectedDistrict]:[];
+ function display(){
+   if(!map)return;
+   const w=map.clientWidth,h=map.clientHeight;if(!w||!h)return;
+   const tileHost=map.querySelector('.general-road-tiles'),maskSvg=map.querySelector('.general-road-mask'),svg=map.querySelector('.general-road-borders');
+   const left=cx-w/2,top=cy-h/2,required=new Set(),n=2**zoom;
+   for(let tx=Math.floor(left/256)-1;tx<=Math.floor((left+w)/256)+1;tx++)for(let ty=Math.floor(top/256)-1;ty<=Math.floor((top+h)/256)+1;ty++){
+     if(ty<0||ty>=n)continue;
+     const x=((tx%n)+n)%n,key=zoom+'/'+x+'/'+ty;required.add(key);
+     let im=tiles.get(key);
+     if(!im){im=document.createElement('img');im.alt='';im.decoding='async';im.referrerPolicy='no-referrer';im.src='https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/'+zoom+'/'+ty+'/'+x;tileHost.append(im);tiles.set(key,im)}
+     im.style.left=Math.round(tx*256-left)+'px';im.style.top=Math.round(ty*256-top)+'px';
+   }
+   for(const [key,im] of tiles)if(!required.has(key)){im.remove();tiles.delete(key)}
+   svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+   maskSvg.replaceChildren();maskSvg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+   const palette=['#d73b29','#2875c7','#168c71','#8a4bb5','#ef7d2e','#a75a84'];
+   const selectedPaths=[];
+   names.forEach((name,index)=>{
+     const features=mapsFor(name),color=palette[index%palette.length];
+     for(const f of features){const g=f.geometry;if(!g)continue;const polygons=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+       for(const poly of polygons){let d='';for(const ring of poly){if(!ring.length)continue;ring.forEach((p,k)=>{const [x,y]=project(p[1],p[0],zoom);d+=(k?'L':'M')+(x-left).toFixed(2)+' '+(y-top).toFixed(2)+' '});d+='Z ';}
+         if(!d)continue;
+         selectedPaths.push(d);
+         const path=document.createElementNS(SVG,'path');path.setAttribute('d',d);path.setAttribute('fill',color);path.setAttribute('fill-opacity','0.09');path.setAttribute('fill-rule','evenodd');path.setAttribute('stroke',color);path.setAttribute('stroke-width','3');path.setAttribute('stroke-linejoin','round');svg.append(path);
+       }
+     }
+   });
+   if(selectedPaths.length){
+     const mask=document.createElementNS(SVG,'path');
+     mask.setAttribute('d',`M 0 0 L ${w} 0 L ${w} ${h} L 0 ${h} Z ` + selectedPaths.join(' '));
+     mask.setAttribute('fill','#eef5f8');
+     mask.setAttribute('fill-rule','evenodd');
+     mask.setAttribute('opacity','0.98');
+     maskSvg.append(mask);
+   }
+ }
+ function setView(){
+   if(!names.length)return;
+   const points=[];
+   for(const name of names)for(const f of mapsFor(name)){const g=f.geometry;if(!g)continue;const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];for(const poly of polys)for(const ring of poly)for(const p of ring)points.push(p)}
+   if(!points.length)return;
+   const west=Math.min(...points.map(p=>p[0])),east=Math.max(...points.map(p=>p[0])),south=Math.min(...points.map(p=>p[1])),north=Math.max(...points.map(p=>p[1]));
+   const w=map.clientWidth||1100,h=map.clientHeight||700;
+   for(let z=16;z>=3;z--){const a=project(north,west,z),b=project(south,east,z);if(b[0]-a[0]<w*.80&&b[1]-a[1]<h*.80){zoom=z;break}}
+   [cx,cy]=project((north+south)/2,(west+east)/2,zoom);
+ }
+ function redraw(){
+   if(!names.length){holder.classList.remove('general-road-active');map=null;tiles.clear();return}
+   if(!names.every(n=>mapsFor(n).length)){return}
+   holder.classList.add('general-road-active');holder.replaceChildren();tiles.clear();
+   map=document.createElement('div');map.className='general-road-map';holder.append(map);
+   const tileHost=document.createElement('div');tileHost.className='general-road-tiles';map.append(tileHost);
+   const maskSvg=document.createElementNS(SVG,'svg');maskSvg.classList.add('general-road-mask');map.append(maskSvg);
+   const svg=document.createElementNS(SVG,'svg');svg.classList.add('general-road-borders');map.append(svg);
+   const label=document.createElement('div');label.className='general-road-panel';label.textContent=names.join(' · ')+' — calles y límites distritales';map.append(label);
+   const controls=document.createElement('div');controls.className='general-road-buttons';
+   for(const [symbol,dz] of [['+',1],['−',-1]]){const b=document.createElement('button');b.textContent=symbol;b.type='button';b.onclick=()=>{if(zoom+dz<3||zoom+dz>18)return;cx*=2**dz;cy*=2**dz;zoom+=dz;tiles.forEach(x=>x.remove());tiles.clear();display()};controls.append(b)}map.append(controls);
+   const attr=document.createElement('div');attr.className='general-road-attrib';attr.textContent='Mapa vial: Esri World Street Map · Límites: GeoJSON distrital';map.append(attr);
+   map.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;drag={x:e.clientX,y:e.clientY,cx,cy};map.setPointerCapture(e.pointerId)});
+   map.addEventListener('pointermove',e=>{if(!drag)return;cx=drag.cx-(e.clientX-drag.x);cy=drag.cy-(e.clientY-drag.y);display()});
+   map.addEventListener('pointerup',()=>drag=null);map.addEventListener('pointercancel',()=>drag=null);
+   map.addEventListener('wheel',e=>{e.preventDefault();const dz=e.deltaY<0?1:-1;if(zoom+dz<3||zoom+dz>18)return;zoom+=dz;cx*=2**dz;cy*=2**dz;tiles.forEach(x=>x.remove());tiles.clear();display()},{passive:false});
+   setView();display();
+ }
+ window.renderMap=function(){original();names=selectedNames();if(names.length&&names.every(n=>mapsFor(n).length))redraw();else holder.classList.remove('general-road-active')};
+ window.addEventListener('resize',()=>{if(map)display()});
+})();
+</script>
+</body></html>
